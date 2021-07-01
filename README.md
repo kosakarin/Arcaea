@@ -1,3 +1,5 @@
+616已更新api，BotArcApi作者已删档跑路，项目暂停更新
+
 # Arcaea
 
 基于HoshinoBotV2的Arcaea查询插件
