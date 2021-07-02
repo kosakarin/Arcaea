@@ -1,21 +1,10 @@
-import hoshino, os, time, asyncio
-from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
+import hoshino, os, time
 
-from .arcaea_api import Arcaea
-from .api import get_api_info, get_web_api
+from .api import get_web_api
 from .sql import *
-from .song import songrating
 
 img = os.path.join(os.path.dirname(__file__), 'img')
-chardir = os.path.join(img, 'char')
-pttdir = os.path.join(img, 'ptt')
-rankdir = os.path.join(img, 'rank')
 songdir = os.path.join(img, 'songs')
-diffdir = os.path.join(img, 'diff')
-
-Exo_Regular = os.path.join(img, 'font', 'Exo-Regular.ttf')
-GeosansLight = os.path.join(img, 'font', 'GeosansLight.ttf')
 
 diffdict = {
     '0' : ['pst', 'past'],
@@ -25,54 +14,6 @@ diffdict = {
 }
 
 log = hoshino.new_logger('Arcaea_draw')
-
-class datatext:
-    #L=X轴，T=Y轴，size=字体大小，fontpath=字体文件，
-    def __init__(self, L, T, size, text, path, anchor = 'lt'):
-        self.L = L
-        self.T = T
-        self.text = str(text)
-        self.path = path
-        self.font = ImageFont.truetype(self.path, size)
-        self.anchor = anchor
-
-def write_text(image, font, text='text', pos=(0, 0), color=(255, 255, 255, 255), anchor='lt'):
-    rgba_image = image
-    text_overlay = Image.new('RGBA', rgba_image.size, (255, 255, 255, 0))
-    image_draw = ImageDraw.Draw(text_overlay)
-    image_draw.text(pos, text, font=font, fill=color, anchor=anchor)
-    return Image.alpha_composite(rgba_image, text_overlay)
-
-def draw_text(image, class_text: datatext, color=(255, 255, 255, 255)):
-    font = class_text.font
-    text = class_text.text
-    anchor = class_text.anchor
-    return write_text(image, font, text, (class_text.L, class_text.T), color, anchor)
-
-def open_img(img):
-    with open(img, 'rb') as f:
-        im = Image.open(f).convert('RGBA')
-    return im
-
-def pttbg(ptt):
-    if ptt == -1:
-        return 'rating_off.png'
-    ptt /= 100
-    if ptt < 3:
-        name = 'rating_0.png'
-    elif 3 <= ptt < 7:
-        name = 'rating_1.png'
-    elif 7 <= ptt < 10:
-        name = 'rating_2.png'
-    elif 10 <= ptt < 11:
-        name = 'rating_3.png'
-    elif 11 <= ptt < 12:
-        name = 'rating_4.png'
-    elif 12 <= ptt < 12.5:
-        name = 'rating_5.png'
-    else:
-        name = 'rating_6.png'
-    return name
 
 def isrank(score):
     if score < 8600000:
@@ -91,28 +32,25 @@ def isrank(score):
         rank = 'EX+'
     return rank
 
-def calc_rating(songid, difficulty, score):
-    if score >= 10000000:
-        rating = songrating[songid][str(difficulty)] + 2
-    elif score >= 9800000:
-        rating = songrating[songid][str(difficulty)] + 1 + (score - 9800000) / 200000
-    else:
-        rating = songrating[songid][str(difficulty)] + (score - 9500000) / 300000
-    return rating
-
 def playtime(date):
     timearray = time.localtime(date / 1000)
     datetime = time.strftime('%Y-%m-%d %H:%M:%S', timearray)
     return datetime
 
-def timediff(date):
-    now = time.mktime(datetime.now().timetuple())
-    time_diff = (now - date / 1000) / 86400
-    return time_diff
+def sql_diff(diff):
+    if diff == 0:
+        sql_diff = 'rating_pst'
+    elif diff == 1:
+        sql_diff = 'rating_prs'
+    elif diff == 1:
+        sql_diff = 'rating_ftr'
+    else:
+        sql_diff = 'rating_byn'
+    return sql_diff
 
 async def draw_score(user_id):
     try:
-        # 获取用户名
+        # 获取成绩
         asql = arcsql()
         bindinfo = asql.get_bind_id(user_id)
         arcid, bind_id = bindinfo[0][0], bindinfo[0][1]
@@ -127,20 +65,16 @@ async def draw_score(user_id):
         arcname = userinfo['name']
         recentscore = userinfo['recent_score'][0]
         songid = recentscore['song_id']
+        difficulty = recentscore['difficulty']
 
         # 歌曲信息
-        getsonginfo = await get_api_info('song', song=songid)
-        if getsonginfo['status'] == -1:
-            return '未找到该曲目，请确认曲名'
-        songinfo = getsonginfo['content']
-        song_id = songinfo['id']
-        title = songinfo['title_localized']['en'] if len(songinfo['title_localized']) == 1 else songinfo['title_localized']['ja']
-        artist = songinfo['artist']
-        difficulty = recentscore['difficulty']
-        diffinfo = songinfo['difficulties'][difficulty]
-        songrating = diffinfo['ratingReal']
+        songinfo = asql.song_info(songid, sql_diff(difficulty))
+        for i in songinfo:
+            title = i[1] if i[1] else i[0]
+            artist = i[2]
+            songrating = i[3] / 10
         # 整理赋值
-        songbg = os.path.join(songdir, song_id, 'base.jpg' if difficulty != 3 else '3.jpg')
+        songbg = os.path.join(songdir, songid, 'base.jpg' if difficulty != 3 else '3.jpg')
         score = recentscore['score']
         sp_count = recentscore['shiny_perfect_count']
         p_count = recentscore['perfect_count']
