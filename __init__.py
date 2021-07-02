@@ -1,5 +1,7 @@
+from hoshino.config import SUPERUSERS
 from hoshino import Service, priv
 from hoshino.typing import CQEvent
+from nonebot import get_bot
 import re
 
 from .sql import *
@@ -16,26 +18,6 @@ diffdict = {
     '3' : ['byd', 'beyond']
 }
 
-@sv.on_prefix('arcinfo')
-async def arcinfo(bot, ev:CQEvent):
-    qqid = ev.user_id
-    msg = ev.message.extract_plain_text().strip()
-    if 'CQ:at' in str(ev.message):
-        result = re.search(r'\[CQ:at,qq=(.*)\]', str(ev.message))
-        qqid = int(result.group(1))
-    result = asql.get_user_id(qqid)
-    if not result:
-        await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) 绑定账号', at_sender=True)
-    elif msg:
-        if msg.isdigit() and len(msg) == 9:
-            arcid = msg
-        else:
-            await bot.finish(ev, '仅可以使用好友码查询', at_sender=True)
-    else:
-        arcid = result[0][0]
-    info = await draw_info(arcid)
-    await bot.send(ev, info, at_sender=True)
-
 @sv.on_prefix(['arcre', 'arcrecent'])
 async def arcrecent(bot, ev:CQEvent):
     qqid = ev.user_id
@@ -45,83 +27,40 @@ async def arcrecent(bot, ev:CQEvent):
         qqid = int(result.group(1))
     result = asql.get_user_id(qqid)
     if not result:
-        await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) 绑定账号', at_sender=True)
+        await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
     elif msg:
         if msg.isdigit() and len(msg) == 9:
-            arcid = msg
+            user_id = msg
         else:
             await bot.finish(ev, '仅可以使用好友码查询', at_sender=True)
     else:
-        arcid = result[0][0]
-    info = await draw_score('recent', arcid)
+        user_id = result[0][0]
+    info = await draw_score(user_id)
     await bot.send(ev, info, at_sender=True)
 
-@sv.on_prefix('arcscore')
-async def arcscore(bot, ev:CQEvent):
-    qqid = ev.user_id
-    diff = 2
-    msg = ev.message.extract_plain_text().strip().split()
-    while '' in msg:
-        msg.remove('')
-    if not msg:
-        await bot.finish(ev, '请输入曲名', at_sender=True)
-    elif 'CQ:at' in str(ev.message):
-        result = re.search(r'\[CQ:at,qq=(.*)\]', str(ev.message))
-        qqid = int(result.group(1))
-    result = asql.get_user_id(qqid)
-    if len(msg) >= 2:
-        if msg[0].isdigit() and len(msg[0]) == 9:
-            arcid = msg[0]
-            del msg[0]
-        elif result:
-            arcid = result[0][0]
-        else:
-            await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) 绑定账号', at_sender=True)
-        for num in diffdict:
-            if msg[-1].lower() in diffdict[num]:
-                diff = int(num)
-                del msg[-1]
-                break
-            elif msg[-1] == num:
-                diff = int(num)
-                del msg[-1]
-                break
-        song = ' '.join(msg)
-    elif result:
-        arcid = result[0][0]
-        song = msg[0]
-    else:
-        await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) 绑定账号', at_sender=True)
-    if not song:
-        await bot.finish(ev, '请输入曲名', at_sender=True)
-
-    info = await draw_score('score', arcid, diff, song=song)
-    await bot.send(ev, info, at_sender=True)
-
-@sv.on_prefix('arcbp')
-async def arcbp(bot, ev:CQEvent):
-    qqid = ev.user_id
-    msg = ev.message.extract_plain_text().strip().split()
-    while '' in msg:
-        msg.remove('')
-    if not msg:
-        await bot.finish(ev, '请输入参数', at_sender=True)
-    elif 'CQ:at' in str(ev.message):
-        result = re.search(r'\[CQ:at,qq=(.*)\]', str(ev.message))
-        qqid = int(result.group(1))
-    result = asql.get_user_id(qqid)
+@sv.on_fullmatch('arcup')
+async def arcup(bot, ev:CQEvent):
+    msg = await newbind()
+    await bot.send(ev, msg)
 
 @sv.on_prefix('arcbind')
 async def bind(bot, ev:CQEvent):
     qqid = ev.user_id
-    arcid = ev.message.extract_plain_text().strip()
-    if not arcid:
-        await bot.finish(ev, '请输入您的 arcid(好友码)', at_sender=True)
+    arcid = ev.message.extract_plain_text().strip().split()
+    try:
+        if not arcid[0].isdigit() and len(arcid[0]) != 9:
+            await bot.finish(ev, '请输入您的 arcid(好友码)', at_sender=True)
+        elif not arcid[1]:
+            await bot.finish(ev, '请输入您的 用户名', at_sender=True)
+    except IndexError:
+        await bot.finish(ev, '请重新输入好友码和用户名，例如：arcbind 114514810 SenPai', at_sender=True)
     result = asql.get_user_id(qqid)
     if result:
         await bot.finish(ev, '您已绑定，如需要解绑请输入arcun', at_sender=True)
-    msg = await bindinfo(qqid, arcid)
+    msg = await bindinfo(qqid, arcid[0], arcid[1])
     await bot.send(ev, msg, at_sender=True)
+    for user_id in SUPERUSERS:
+        await get_bot().send_msg(user_id=user_id, message=f'Code:{arcid[0]}\nName:{arcid[1]}\n申请加为好友')
 
 @sv.on_fullmatch('arcun')
 async def unbind(bot, ev:CQEvent):
