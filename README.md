@@ -8,16 +8,14 @@
 
 # 使用方法
 
-1. 搭建API服务器，[BotArcAPI](https://github.com/TheSnowfield/BotArcAPI)
-2. 将该项目放在HoshinoBot插件目录 `modules` 下，或者clone本项目 `git clone https://github.com/Yuri-YuzuChaN/Arcaea`
-3. 在`config/__bot__.py`模块列表中添加`Arcaea`
-4. 修改`api.py`文件`api`字符串为`BotArcApi`的地址
-
+1. 将该项目放在HoshinoBot插件目录 `modules` 下，或者clone本项目 `git clone https://github.com/Yuri-YuzuChaN/Arcaea`
+2. 在`config/__bot__.py`模块列表中添加`Arcaea`
+3. 在数据库`arcaea.db`中`LOGIN`表添加查询用账号密码以及绑定ID（随意数字）
+ 
 # 另外
 
-1. 使用前在数据库`arcaea.db`中`LOGIN`表添加查询用账号密码以及绑定ID（随意数字）
-2. 后续游戏版本更新需自行修改数据库文件`arcsong.db`添加曲目，`img/song`的曲目图片
-3. 每次添加完好友必须使用一次`arcup`指令
+1. 后续游戏版本更新需自行修改数据库文件`arcsong.db`添加曲目，`img/song`的曲目图片
+2. 每次添加完好友必须使用一次`arcup`指令
 
 # 指令
 
