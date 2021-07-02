@@ -3,6 +3,7 @@
 # Arcaea
 
 基于HoshinoBotV2的Arcaea查询插件，所有文件适用于游戏版本 3.6.4
+
 项目地址：https://github.com/Yuri-YuzuChaN/Arcaea
 
 # 使用方法
@@ -11,7 +12,7 @@
 2. 将该项目放在HoshinoBot插件目录 `modules` 下，或者clone本项目 `git clone https://github.com/Yuri-YuzuChaN/Arcaea`
 3. 在`config/__bot__.py`模块列表中添加`Arcaea`
 4. 修改`api.py`文件`api`字符串为`BotArcApi`的地址
-5. 将`arcsong.db`移动到`BotArcAPI`
+5. 将`arcsong.db`移动到`BotArcAPI`目录下的`savedata`子目录覆盖
 
 # 另外
 
