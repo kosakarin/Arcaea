@@ -1,4 +1,4 @@
-# 616已更新api，BotArcApi作者已删档跑路，项目暂停更新，如果你能找到BotArcAPI遗产或已经在使用，可以继续利用该api的曲库使用目前版本的插件，仅能查询Recent，后续将放弃该api服务器
+# 616已更新api，BotArcApi作者已删档跑路，项目暂停更新，仅能查询Recent
 
 # Arcaea
 
@@ -12,12 +12,11 @@
 2. 将该项目放在HoshinoBot插件目录 `modules` 下，或者clone本项目 `git clone https://github.com/Yuri-YuzuChaN/Arcaea`
 3. 在`config/__bot__.py`模块列表中添加`Arcaea`
 4. 修改`api.py`文件`api`字符串为`BotArcApi`的地址
-5. 将`arcsong.db`移动到`BotArcAPI`目录下的`savedata`子目录覆盖
 
 # 另外
 
 1. 使用前在数据库`arcaea.db`中`LOGIN`表添加查询用账号密码以及绑定ID（随意数字）
-2. 后续游戏版本更新需自行修改数据库文件`arcsong.db`添加曲目，`img/song`的曲目图片，以及`song.py`的定数
+2. 后续游戏版本更新需自行修改数据库文件`arcsong.db`添加曲目，`img/song`的曲目图片
 3. 每次添加完好友必须使用一次`arcup`指令
 
 # 指令
