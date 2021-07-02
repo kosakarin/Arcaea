@@ -8,7 +8,14 @@ from .sql import *
 from .api import *
 from .draw import *
 
-sv = Service('arcaea', manage_priv=priv.ADMIN, enable_on_default=True, visible=True)
+help = '''
+arcre	查询最近一次游玩成绩
+arcup	查询用账号添加完好友，使用该指令绑定查询账号，添加成功即可使用arcre指令
+arcbind	[arcid] [arcname]	绑定用户
+arcun   解除绑定
+'''
+
+sv = Service('arcaea', manage_priv=priv.ADMIN, enable_on_default=True, visible=True, help_=help)
 asql = arcsql()
 
 diffdict = {
@@ -38,8 +45,10 @@ async def arcrecent(bot, ev:CQEvent):
     info = await draw_score(user_id)
     await bot.send(ev, info, at_sender=True)
 
-@sv.on_fullmatch('arcup')
+@sv.on_fullmatch(['arcup', 'arcupdate'])
 async def arcup(bot, ev:CQEvent):
+    if not priv.check_priv(ev, priv.SUPERUSER):
+        await bot.finish(ev, '请联系管理员更新')
     msg = await newbind()
     await bot.send(ev, msg)
 
