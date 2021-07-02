@@ -7,7 +7,6 @@ from .api import get_api_info, get_web_api
 from .sql import *
 from .song import songrating
 
-arc = Arcaea()
 img = os.path.join(os.path.dirname(__file__), 'img')
 chardir = os.path.join(img, 'char')
 pttdir = os.path.join(img, 'ptt')
