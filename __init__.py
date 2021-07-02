@@ -34,7 +34,7 @@ async def arcrecent(bot, ev:CQEvent):
         result = asql.get_user_id(qqid)
     if not result:
         await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
-    elif result[0][0].strip():
+    elif result[0][0] == '':
         await bot.finish(ev, '该账号已绑定但尚未添加为好友，请联系BOT管理员添加好友并执行 arcup 指令', at_sender=True)
     else:
         user_id = result[0][0]
