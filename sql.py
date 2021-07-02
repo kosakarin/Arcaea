@@ -73,6 +73,14 @@ class arcsql():
             print(e)
             return False
 
+    def get_user_code(self, code):
+        try:
+            result = self.arc_conn().execute(f'SELECT USER_ID FROM USER WHERE ARCID = {code}').fetchall()
+            return result
+        except Exception as e:
+            print(e)
+            return False
+
     def get_bind_id(self, user_id):
         try:
             result = self.arc_conn().execute(f'SELECT ARCID, BIND_ID FROM USER WHERE USER_ID = {user_id}').fetchall()
