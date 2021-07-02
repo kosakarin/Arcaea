@@ -42,7 +42,7 @@ def sql_diff(diff):
         sql_diff = 'rating_pst'
     elif diff == 1:
         sql_diff = 'rating_prs'
-    elif diff == 1:
+    elif diff == 2:
         sql_diff = 'rating_ftr'
     else:
         sql_diff = 'rating_byn'
