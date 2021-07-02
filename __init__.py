@@ -18,13 +18,6 @@ arcun   解除绑定
 sv = Service('arcaea', manage_priv=priv.ADMIN, enable_on_default=True, visible=True, help_=help)
 asql = arcsql()
 
-diffdict = {
-    '0' : ['pst', 'past'],
-    '1' : ['prs', 'present'],
-    '2' : ['ftr', 'future'],
-    '3' : ['byd', 'beyond']
-}
-
 @sv.on_prefix(['arcre', 'arcrecent'])
 async def arcrecent(bot, ev:CQEvent):
     qqid = ev.user_id
@@ -32,14 +25,17 @@ async def arcrecent(bot, ev:CQEvent):
     if 'CQ:at' in str(ev.message):
         result = re.search(r'\[CQ:at,qq=(.*)\]', str(ev.message))
         qqid = int(result.group(1))
-    result = asql.get_user_id(qqid)
-    if not result:
-        await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
     elif msg:
         if msg.isdigit() and len(msg) == 9:
-            user_id = msg
+            result = asql.get_user_code(msg)
         else:
             await bot.finish(ev, '仅可以使用好友码查询', at_sender=True)
+    else:
+        result = asql.get_user_id(qqid)
+    if not result:
+        await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
+    elif result[0][0].strip():
+        await bot.finish(ev, '该账号已绑定但尚未添加为好友，请联系BOT管理员添加好友并执行 arcup 指令', at_sender=True)
     else:
         user_id = result[0][0]
     info = await draw_score(user_id)
@@ -48,7 +44,7 @@ async def arcrecent(bot, ev:CQEvent):
 @sv.on_fullmatch(['arcup', 'arcupdate'])
 async def arcup(bot, ev:CQEvent):
     if not priv.check_priv(ev, priv.SUPERUSER):
-        await bot.finish(ev, '请联系管理员更新')
+        await bot.finish(ev, '请联系BOT管理员更新')
     msg = await newbind()
     await bot.send(ev, msg)
 
