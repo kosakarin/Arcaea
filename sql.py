@@ -65,6 +65,14 @@ class arcsql():
             print(e)
             return False
 
+    def get_user_arcid(self, qqid):
+        try:
+            result = self.arc_conn().execute(f'SELECT ARCID FROM USER WHERE QQID = {qqid}').fetchall()
+            return result
+        except Exception as e:
+            print(e)
+            return False
+
     def get_user_name(self, user_id):
         try:
             result = self.arc_conn().execute(f'SELECT ARCNAME FROM USER WHERE USER_ID = {user_id}').fetchall()
@@ -117,7 +125,7 @@ class arcsql():
 
     def song_info(self, sid, diff):
         try:
-            result = self.song_conn().execute(f'select name_en, name_jp, artist, {diff}  from songs where sid = "{sid}"').fetchall()
+            result = self.song_conn().execute(f'select name_en, name_jp, artist, {diff} from songs where sid = "{sid}"').fetchall()
             return result
         except Exception as e:
             print(e)
