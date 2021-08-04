@@ -7,8 +7,9 @@
 # 使用方法
 
 1. 将该项目放在HoshinoBot插件目录 `modules` 下，或者clone本项目 `git clone https://github.com/Yuri-YuzuChaN/Arcaea`
-2. 在`config/__bot__.py`模块列表中添加`Arcaea`
-3. 在数据库`arcaea.db`中`LOGIN`表添加查询用账号密码以及绑定ID（随意数字）
+2. pip以下依赖：`websockets`
+3. 在`config/__bot__.py`模块列表中添加`Arcaea`
+4. 在数据库`arcaea.db`中`LOGIN`表添加查询用账号密码以及绑定ID（随意数字）
  
 # 另外
 
