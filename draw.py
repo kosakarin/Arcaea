@@ -1,10 +1,19 @@
 import hoshino, os, time
+from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
 
-from .api import get_web_api
+from .api import *
 from .sql import *
 
 img = os.path.join(os.path.dirname(__file__), 'img')
+chardir = os.path.join(img, 'char')
+pttdir = os.path.join(img, 'ptt')
+rankdir = os.path.join(img, 'rank')
 songdir = os.path.join(img, 'songs')
+diffdir = os.path.join(img, 'diff')
+
+Exo_Regular = os.path.join(img, 'font', 'Exo-Regular.ttf')
+GeosansLight = os.path.join(img, 'font', 'GeosansLight.ttf')
 
 diffdict = {
     '0' : ['pst', 'past'],
@@ -14,6 +23,54 @@ diffdict = {
 }
 
 log = hoshino.new_logger('Arcaea_draw')
+
+class datatext:
+    #L=X轴，T=Y轴，size=字体大小，fontpath=字体文件，
+    def __init__(self, L, T, size, text, path, anchor = 'lt'):
+        self.L = L
+        self.T = T
+        self.text = str(text)
+        self.path = path
+        self.font = ImageFont.truetype(self.path, size)
+        self.anchor = anchor
+
+def write_text(image, font, text='text', pos=(0, 0), color=(255, 255, 255, 255), anchor='lt'):
+    rgba_image = image
+    text_overlay = Image.new('RGBA', rgba_image.size, (255, 255, 255, 0))
+    image_draw = ImageDraw.Draw(text_overlay)
+    image_draw.text(pos, text, font=font, fill=color, anchor=anchor)
+    return Image.alpha_composite(rgba_image, text_overlay)
+
+def draw_text(image, class_text: datatext, color=(255, 255, 255, 255)):
+    font = class_text.font
+    text = class_text.text
+    anchor = class_text.anchor
+    return write_text(image, font, text, (class_text.L, class_text.T), color, anchor)
+
+def open_img(img):
+    with open(img, 'rb') as f:
+        im = Image.open(f).convert('RGBA')
+    return im
+
+def pttbg(ptt):
+    if ptt == -1:
+        return 'rating_off.png'
+    ptt /= 100
+    if ptt < 3:
+        name = 'rating_0.png'
+    elif 3 <= ptt < 7:
+        name = 'rating_1.png'
+    elif 7 <= ptt < 10:
+        name = 'rating_2.png'
+    elif 10 <= ptt < 11:
+        name = 'rating_3.png'
+    elif 11 <= ptt < 12:
+        name = 'rating_4.png'
+    elif 12 <= ptt < 12.5:
+        name = 'rating_5.png'
+    else:
+        name = 'rating_6.png'
+    return name
 
 def isrank(score):
     if score < 8600000:
@@ -48,21 +105,179 @@ def sql_diff(diff):
         sql_diff = 'rating_byn'
     return sql_diff
 
-async def draw_score(user_id):
+def playtime(date):
+    timearray = time.localtime(date / 1000)
+    datetime = time.strftime('%Y-%m-%d %H:%M:%S', timearray)
+    return datetime
+
+def timediff(date):
+    now = time.mktime(datetime.now().timetuple())
+    time_diff = (now - date / 1000) / 86400
+    return time_diff
+
+async def draw_info(arcid):
     try:
-        # 获取成绩
-        asql = arcsql()
-        bindinfo = asql.get_bind_id(user_id)
-        arcid, bind_id = bindinfo[0][0], bindinfo[0][1]
-        result = asql.get_login(bind_id)
-        scoreinfo = await get_web_api(result[0][0], result[0][1])
-        friends = scoreinfo['value']['friends']
-        for n, i in enumerate(friends):
-            if user_id == i['user_id']:
-                userinfo = friends[n]
+        best30sum = 0
+        alldata = await arcb30(arcid)
+        if not isinstance(alldata, list):
+            return alldata
+        arcname = alldata[0]['data']['name']
+        character = alldata[0]['data']['character']
+        is_char_uncapped = alldata[0]['data']['is_char_uncapped']
+        is_char_uncapped_override = alldata[0]['data']['is_char_uncapped_override']
+        icon_name = f'{character}u_icon.png' if is_char_uncapped ^ is_char_uncapped_override else f'{character}_icon.png'
+        userrating = alldata[0]['data']['rating']
+        log.info(f'Start Arcaea API {playtime(time.time() * 1000)}')
+        scorelist = alldata[1:]
+        scorelist.sort(key = lambda v: v['data'][0]['rating'], reverse=True)
+        for i in range(30) if len(scorelist) >= 30 else range(len(scorelist)):
+            best30sum += scorelist[i]['data'][0]['rating']
+        
+        b30 = best30sum / 30
+        r10 = (userrating / 100 - b30 * 0.75) / 0.25
+        #------------------------------------------------
+        # 图片整理
+        icon = os.path.join(chardir, icon_name)
+        ptt = os.path.join(pttdir, pttbg(userrating))
+        # 新建底图
+        bg = os.path.join(img, 'b30_bg.png')
+        im = Image.new('RGBA', (1800, 3000))
+        b30_bg = open_img(bg)
+        im.alpha_composite(b30_bg)
+        # 角色
+        icon_bg = open_img(icon).resize((250, 250))
+        im.alpha_composite(icon_bg, (175, 275))
+        # ptt背景
+        ptt_bg = open_img(ptt).resize((150, 150))
+        im.alpha_composite(ptt_bg, (300, 400))
+        # ptt
+        w_ptt = datatext(375, 475, 45, userrating / 100 if userrating != -1 else '--', Exo_Regular, anchor='mm')
+        im = draw_text(im, w_ptt)
+        # arcname
+        w_arcname = datatext(455, 400, 85, arcname, GeosansLight, anchor='lb')
+        im = draw_text(im, w_arcname)
+        # arcid
+        w_arcid = datatext(480, 475, 60, f'ID:{arcid}', Exo_Regular, anchor='lb')
+        im = draw_text(im, w_arcid)
+        # r10
+        w_r10 = datatext(1100, 400, 60, f'Recent 10: {r10:.3f}', Exo_Regular, anchor='lb')
+        im = draw_text(im, w_r10)
+        # b30
+        w_b30 = datatext(1100, 425, 60, f'Best 30: {b30:.3f}', Exo_Regular)
+        im = draw_text(im, w_b30)
+        # 30个成绩
+        bg_y = 580
+        for num, i in enumerate(scorelist):
+            if num == 30:
                 break
+            # 横3竖10
+            if num % 3 == 0:
+                bg_y += 240 if num != 0 else 0
+                bg_x = 30
+            else:
+                bg_x += 600
+
+            data = i['data'][0]
+            # 歌曲信息
+            songid = data['song_id']
+            difficulty = data['difficulty']
+            # 成绩整理
+            song_rating = data['constant']
+            score = data['score']
+            sp_count = data['shiny_perfect_count']
+            p_count = data['perfect_count']
+            far_count = data['near_count']
+            lost_count = data['miss_count']
+            health = data['health']
+            play_time = data['time_played']
+            rating = data['rating']
+            # 图片整理
+            score30 = os.path.join(img, 'b30_score_bg.png')
+            rank = os.path.join(rankdir, f'grade_{isrank(score).lower()}.png' if health != -1 else 'grade_f.png')
+            songbg = os.path.join(songdir, songid, 'base.jpg')
+            diffbg = os.path.join(diffdir, diffdict[str(difficulty)][0].upper() + '.png')
+            newbg = os.path.join(img, 'new.png')
+            # 底图
+            score30_bg = open_img(score30)
+            im.alpha_composite(score30_bg, (10 + bg_x, bg_y))
+            # 曲图
+            song_bg = open_img(songbg).resize((190, 190))
+            im.alpha_composite(song_bg, (35 + bg_x, 5 + bg_y))
+            # 难度
+            diff_bg = open_img(diffbg).resize((72, 72))
+            im.alpha_composite(diff_bg, (161 + bg_x, bg_y - 3))
+            # rank
+            rank_bg = open_img(rank).resize((135, 65))
+            im.alpha_composite(rank_bg, (395 + bg_x, 95 + bg_y))
+            # songrating
+            w_songrating = datatext(223 + bg_x, 12 + bg_y, 20, f'{song_rating:.1f}', Exo_Regular, anchor='rt')
+            im = draw_text(im, w_songrating)
+            # #
+            w_rank = datatext(480 + bg_x, bg_y, 45, f'#{num + 1}', Exo_Regular, anchor='lm')
+            im = draw_text(im, w_rank)
+            # 分数
+            w_score = datatext(235 + bg_x, 15 + bg_y, 55, f'{score:,}', GeosansLight)
+            im = draw_text(im, w_score)
+            # PURE 
+            w_PURE = datatext(235 + bg_x, 75 + bg_y, 30, 'PURE', GeosansLight)
+            im = draw_text(im, w_PURE)
+            w_p_count = datatext(335 + bg_x, 75 + bg_y, 30, p_count, GeosansLight)
+            im = draw_text(im, w_p_count)
+            w_sp_count = datatext(400 + bg_x, 75 + bg_y, 20, f'+{sp_count}', GeosansLight)
+            im = draw_text(im, w_sp_count)
+            # FAR
+            w_FAR = datatext(235 + bg_x, 105 + bg_y, 30, 'FAR', GeosansLight)
+            im = draw_text(im, w_FAR)
+            w_far_count = datatext(335 + bg_x, 105 + bg_y, 30, far_count, GeosansLight)
+            im = draw_text(im, w_far_count)
+            # LOST
+            w_LOST = datatext(235 + bg_x, 135 + bg_y, 30, 'LOST', GeosansLight)
+            im = draw_text(im, w_LOST)
+            w_lost_count = datatext(335 + bg_x, 135 + bg_y, 30, lost_count, GeosansLight)
+            im = draw_text(im, w_lost_count)
+            # Rating
+            w_Rating = datatext(235 + bg_x, 170 + bg_y, 30, 'Rating:', GeosansLight)
+            im = draw_text(im, w_Rating)
+            w_u_rating = datatext(335 + bg_x, 170 + bg_y, 30, f'{rating:.3f}', GeosansLight)
+            im = draw_text(im, w_u_rating)
+            # time
+            game_time = playtime(play_time)
+            w_time = datatext(280 + bg_x, 210 + bg_y, 30, game_time, Exo_Regular, anchor='mm')
+            im = draw_text(im, w_time)
+            # new
+            if timediff(play_time) <= 7:
+                new_bg = open_img(newbg)
+                im.alpha_composite(new_bg, (bg_x - 23, bg_y))
+        # save
+        outputiamge_path = os.path.join(img, 'out', f'{arcid}.png')
+        im.save(outputiamge_path)
+        msg = f'[CQ:image,file=file:///{outputiamge_path}]'
+        return msg
+    except Exception as e:
+        log.error(e)
+        return f'Error {type(e)}'
+
+async def draw_score(user_id, est: bool = False):
+    try:
+        # 获取用户名
+        asql = arcsql()
+        if est:
+            scoreinfo = await arcb30(user_id, est)
+            userinfo = scoreinfo['data']
+            arcid = user_id
+        else:
+            bindinfo = asql.get_bind_id(user_id)
+            arcid, bind_id = bindinfo[0][0], bindinfo[0][1]
+            result = asql.get_login(bind_id)
+            scoreinfo = await get_web_api(result[0][0], result[0][1])
+            friends = scoreinfo['value']['friends']
+            for n, i in enumerate(friends):
+                if user_id == i['user_id']:
+                    userinfo = friends[n]
+                    break
 
         arcname = userinfo['name']
+        userrating = userinfo['rating'] / 100 if userinfo['rating'] != -1 else '--'
         recentscore = userinfo['recent_score'][0]
         songid = recentscore['song_id']
         difficulty = recentscore['difficulty']
@@ -81,15 +296,13 @@ async def draw_score(user_id):
         far_count = recentscore['near_count']
         miss_count = recentscore['miss_count']
         health = recentscore['health']
-        modifier = recentscore['modifier']
         play_time = recentscore['time_played']
-        best_clear = recentscore['best_clear_type']
-        clear = recentscore['clear_type']
         rating = recentscore['rating']
 
         msg = f'''
 [CQ:image,file=file:///{songbg}]
 Player: {arcname}
+Rating: {userrating}
 Code: {arcid}
 Play Time: {playtime(play_time)}
 ---------------------------------
@@ -111,7 +324,7 @@ Rating: {rating:.2f}'''
 async def bindinfo(qqid, arcid, arcname):
     asql = arcsql()
     asql.insert_temp_user(qqid, arcid, arcname.lower())
-    return f'用户 {arcid} 已成功绑定QQ {qqid}， 请等待管理员确认是否为好友'
+    return f'用户 {arcid} 已成功绑定QQ {qqid}，现可使用 arcinfo 指令查询B30成绩，arcre 指令需等待管理员确认是否为好友才能使用'
 
 async def newbind():
     try:
