@@ -324,7 +324,7 @@ Rating: {rating:.2f}'''
 async def bindinfo(qqid, arcid, arcname):
     asql = arcsql()
     asql.insert_temp_user(qqid, arcid, arcname.lower())
-    return f'用户 {arcid} 已成功绑定QQ {qqid}，现可使用 arcinfo 指令查询B30成绩，arcre 指令需等待管理员确认是否为好友才能使用'
+    return f'用户 {arcid} 已成功绑定QQ {qqid}，现可使用 <arcinfo> 指令查询B30成绩和 <arcre:> 指令使用 est 查分器查询最近，<arcre> 指令需等待管理员确认是否为好友才能使用'
 
 async def newbind():
     try:
