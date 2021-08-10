@@ -1,6 +1,6 @@
 # Arcaea
 
-基于HoshinoBotV2的Arcaea查询插件，所有文件适用于游戏版本 3.7.0
+基于HoshinoBotV2的Arcaea查询插件，所有文件适用于游戏版本 3.8.0
 
 项目地址：https://github.com/Yuri-YuzuChaN/Arcaea
 
