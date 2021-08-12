@@ -6,6 +6,7 @@ class arcsql():
     def __init__(self):
         os.makedirs(os.path.dirname(SQL), exist_ok=True)
         self.makesql()
+        self.makelogin()
     
     def arc_conn(self):
         return sqlite3.connect(SQL)
