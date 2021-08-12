@@ -21,7 +21,6 @@ async def arcb30(arcid: str, re: bool = False):
         b30_data = []
         async with websockets.connect(est) as ws:
             await ws.send(str(arcid))
-            await ws.recv()
             while True:
                 if ws.closed:
                     break
@@ -30,9 +29,11 @@ async def arcb30(arcid: str, re: bool = False):
                     return '连接查分器错误'
                 elif data == 'bye':
                     return b30_data
-                elif re and isinstance(data, bytes):
-                    return json.loads(brotli.decompress(data))
                 elif isinstance(data, bytes):
-                    b30_data.append(json.loads(brotli.decompress(data)))
+                    info = json.loads(brotli.decompress(data))
+                    if info['cmd'] == 'userinfo' and re:
+                        return info
+                    elif info['cmd'] == 'scores':
+                        b30_data.append(info)
     except Exception as e:
         return f'Error: {type(e)}'
