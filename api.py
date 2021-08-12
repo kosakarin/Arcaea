@@ -33,7 +33,7 @@ async def arcb30(arcid: str, re: bool = False):
                     info = json.loads(brotli.decompress(data))
                     if info['cmd'] == 'userinfo' and re:
                         return info
-                    elif info['cmd'] == 'scores':
+                    elif info['cmd'] == 'scores' or info['cmd'] == 'userinfo':
                         b30_data.append(info)
     except Exception as e:
         return f'Error: {type(e)}'
