@@ -1,15 +1,19 @@
 # Arcaea
 
-基于HoshinoBotV2的Arcaea查询插件，所有文件适用于游戏版本 3.8.0
+基于HoshinoBotV2的Arcaea查询插件，所有文件适用于游戏版本 3.8.2
 
 项目地址：https://github.com/Yuri-YuzuChaN/Arcaea
 
+有任何疑问或者不会使用插件，可联系QQ：806235364
+
 # 使用方法
+
+**已使用该插件用户请使用数据库工具在`arcaea.db`中的`LOGIN`表添加新字段`IS_FULL`，如不会添加字段请使用数据库工具删除`LOGIN`表，重启bot让程序自行创建新的`LOGIN`表，在进行以下第4个步骤**
 
 1. 将该项目放在HoshinoBot插件目录 `modules` 下，或者clone本项目 `git clone https://github.com/Yuri-YuzuChaN/Arcaea`
 2. pip以下依赖：`websockets`
 3. 在`config/__bot__.py`模块列表中添加`Arcaea`
-4. 在数据库`arcaea.db`中`LOGIN`表添加查询用账号密码以及绑定ID（随意数字）
+4. 在数据库`arcaea.db`中`LOGIN`表添加查询用账号密码以及绑定ID（随意数字），`IS_FULL` 字段请根据查询用账号的好友数量填写，如果已经到达10个上线请输入`1`，否则为`0`
 
 **注意：查询用账号需要自行注册，查询自己也需要查询用账号添加自己为好友**
  
@@ -19,6 +23,10 @@
 2. 每次添加完好友必须使用一次`arcup`指令
 
 # 更新说明
+
+**2021-08-27**
+
+1. 修改数据库结构
 
 **2021-08-13**
 
