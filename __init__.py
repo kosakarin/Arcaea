@@ -29,7 +29,7 @@ async def arcinfo(bot, ev:CQEvent):
     if 'CQ:at' in str(ev.message):
         result = re.search(r'\[CQ:at,qq=(.*)\]', str(ev.message))
         qqid = int(result.group(1))
-    result = asql.get_user_arcid(qqid)
+    result = asql.get_user(qqid)
     if msg:
         if msg.isdigit() and len(msg) == 9:
             arcid = msg
@@ -38,7 +38,8 @@ async def arcinfo(bot, ev:CQEvent):
     elif not result:
         await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
     else:
-        arcid = result[0][0]
+        arcid = result[0]
+    await bot.send(ev, '正在查询，请耐心等待...')
     info = await draw_info(arcid)
     await bot.send(ev, info, at_sender=True)
 
@@ -50,20 +51,19 @@ async def arcre(bot, ev:CQEvent):
     if 'CQ:at' in str(ev.message):
         result = re.search(r'\[CQ:at,qq=(.*)\]', str(ev.message))
         qqid = int(result.group(1))
-    result = asql.get_user_id(qqid)
+    result = asql.get_user(qqid)
     if msg:
         if msg.isdigit() and len(msg) == 9:
             result = asql.get_user_code(msg)
             if not result:
                 await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
-            user_id = result[0][0]
+            user_id = result[0]
         elif msg == ':' or msg == '：':
-            result = asql.get_user_arcid(qqid)
             if not result:
                 await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
             else:
                 est = True
-                user_id = result[0][0]
+                user_id = result[0]
         elif ':' in msg or '：' in msg:
             user_id = msg[1:]
             if user_id.isdigit() and len(user_id) == 9:
@@ -74,10 +74,10 @@ async def arcre(bot, ev:CQEvent):
             await bot.finish(ev, '仅可以使用好友码查询', at_sender=True)
     elif not result:
         await bot.finish(ev, '该账号尚未绑定，请输入 arcbind arcid(好友码) arcname(用户名)', at_sender=True)
-    elif result[0][0] == None:
+    elif result[1] == None:
         await bot.finish(ev, '该账号已绑定但尚未添加为好友，请联系BOT管理员添加好友并执行 arcup 指令', at_sender=True)
     else:
-        user_id = result[0][0]
+        user_id = result[1]
     info = await draw_score(user_id, est)
     await bot.send(ev, info, at_sender=True)
 
@@ -99,7 +99,7 @@ async def bind(bot, ev:CQEvent):
             await bot.finish(ev, '请输入您的 用户名', at_sender=True)
     except IndexError:
         await bot.finish(ev, '请重新输入好友码和用户名\n例如：arcbind 114514810 sb616', at_sender=True)
-    result = asql.get_user_id(qqid)
+    result = asql.get_user(qqid)
     if result:
         await bot.finish(ev, '您已绑定，如需要解绑请输入arcun', at_sender=True)
     msg = await bindinfo(qqid, arcid[0], arcid[1])
@@ -110,7 +110,7 @@ async def bind(bot, ev:CQEvent):
 @sv.on_fullmatch(['arcun', 'Arcun', 'ARCUN'])
 async def unbind(bot, ev:CQEvent):
     qqid = ev.user_id
-    result = asql.get_user_id(qqid)
+    result = asql.get_user(qqid)
     if result:
         if asql.delete_user(qqid):
             msg = '解绑成功'
