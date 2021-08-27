@@ -5,21 +5,19 @@ me = 'webapi/user/me'
 login = 'auth/login'
 est = 'wss://arc.estertion.win:616/'
 
-async def get_web_api(email, password, ac: bool = False):
+async def get_web_api(email, password):
     data = {'email': email, 'password': password}
     async with aiohttp.ClientSession() as session:
         async with session.post(url + login, data=data) as req:
-            if ac:
-                ok = True if req.status == 200 else False
-                return ok 
-
+            if req.status != 200:
+                return '查询用账号异常，请联系BOT管理员'
         async with session.get(url + me) as reqs:
             return await reqs.json()
 
 async def arcb30(arcid: str, re: bool = False):
     try:
         b30_data = []
-        async with websockets.connect(est) as ws:
+        async with websockets.connect(est, timeout=10) as ws:
             await ws.send(str(arcid))
             while True:
                 if ws.closed:
@@ -35,5 +33,7 @@ async def arcb30(arcid: str, re: bool = False):
                         return info
                     elif info['cmd'] == 'scores' or info['cmd'] == 'userinfo':
                         b30_data.append(info)
+    except websockets.ConnectionClosedError as e:
+        return '可能在排队，请暂时停用<arcinfo>和<arcre:>指令'
     except Exception as e:
         return f'Error: {type(e)}'
