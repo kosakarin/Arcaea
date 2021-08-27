@@ -1,4 +1,5 @@
-import hoshino, os, time
+import hoshino, os, traceback
+from time import strftime, localtime, time, mktime
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 
@@ -52,73 +53,99 @@ def open_img(img):
         im = Image.open(f).convert('RGBA')
     return im
 
-def pttbg(ptt):
+def pttbg(ptt: int) -> str:
     if ptt == -1:
         return 'rating_off.png'
     ptt /= 100
     if ptt < 3:
         name = 'rating_0.png'
-    elif 3 <= ptt < 7:
+    elif ptt < 7:
         name = 'rating_1.png'
-    elif 7 <= ptt < 10:
+    elif ptt < 10:
         name = 'rating_2.png'
-    elif 10 <= ptt < 11:
+    elif  ptt < 11:
         name = 'rating_3.png'
-    elif 11 <= ptt < 12:
+    elif  ptt < 12:
         name = 'rating_4.png'
-    elif 12 <= ptt < 12.5:
+    elif  ptt < 12.5:
         name = 'rating_5.png'
     else:
         name = 'rating_6.png'
     return name
 
-def isrank(score):
+def isrank(score: int) -> str:
     if score < 8600000:
         rank = 'D'
-    elif 8600000 <= score < 8900000:
+    elif score < 8900000:
         rank = 'C'
-    elif 8900000 <= score < 9200000:
+    elif score < 9200000:
         rank = 'B'
-    elif 9200000 <= score < 9500000:
+    elif score < 9500000:
         rank = 'A'
-    elif 9500000 <= score < 9800000:
+    elif score < 9800000:
         rank = 'AA'
-    elif 9800000 <= score < 9900000:
+    elif score < 9900000:
         rank = 'EX'
     else:
         rank = 'EX+'
     return rank
 
-def playtime(date):
-    timearray = time.localtime(date / 1000)
-    datetime = time.strftime('%Y-%m-%d %H:%M:%S', timearray)
-    return datetime
+def calc_rating(songrating: float = 0, rating: float = 0, score: int = 0) -> str:
+    if score and (rating or songrating):
+        if songrating:
+            if score >= 10000000:
+                result = songrating + 2
+            elif score >= 9800000:
+                result = songrating + 1 + (score - 9800000) / 200000
+            else:
+                result = songrating + (score - 9500000) / 300000
+            msg = f'Rating: {result}'
+        else:
+            if score >= 10000000:
+                result = rating - 2
+            elif score >= 9800000:
+                result = rating - 1 - (score - 9800000) / 200000
+            else:
+                result = rating - (score - 9500000) / 300000
+            msg = f'Song Rating: {result}'
+    else:
+        r = songrating - rating
+        if r == -2:
+            result = 1000
+        elif r > -2:
+            result = (rating - songrating - 1 + 980 / 20) * 20
+        else:
+            result = (rating - songrating + 950 / 30) * 30
+        msg = f'Score: {result}'
+    return msg
 
 def sql_diff(diff):
     if diff == 0:
-        sql_diff = 'rating_pst'
+        sql_diff = 'pst'
     elif diff == 1:
-        sql_diff = 'rating_prs'
+        sql_diff = 'prs'
     elif diff == 2:
-        sql_diff = 'rating_ftr'
+        sql_diff = 'ftr'
     else:
-        sql_diff = 'rating_byn'
+        sql_diff = 'byd'
     return sql_diff
 
 def playtime(date):
-    timearray = time.localtime(date / 1000)
-    datetime = time.strftime('%Y-%m-%d %H:%M:%S', timearray)
+    timearray = localtime(date / 1000)
+    datetime = strftime('%Y-%m-%d %H:%M:%S', timearray)
     return datetime
 
 def timediff(date):
-    now = time.mktime(datetime.now().timetuple())
+    now = mktime(datetime.now().timetuple())
     time_diff = (now - date / 1000) / 86400
     return time_diff
 
-async def draw_info(arcid):
+async def draw_info(arcid: int) -> str:
     try:
         best30sum = 0
+        log.info(f'Start Arcaea API {playtime(time() * 1000)}')
         alldata = await arcb30(arcid)
+        log.info(f'End Arcaea API {playtime(time() * 1000)}')
         if not isinstance(alldata, list):
             return alldata
         arcname = alldata[0]['data']['name']
@@ -127,7 +154,6 @@ async def draw_info(arcid):
         is_char_uncapped_override = alldata[0]['data']['is_char_uncapped_override']
         icon_name = f'{character}u_icon.png' if is_char_uncapped ^ is_char_uncapped_override else f'{character}_icon.png'
         userrating = alldata[0]['data']['rating']
-        log.info(f'Start Arcaea API {playtime(time.time() * 1000)}')
         scorelist = alldata[1:]
         scorelist.sort(key = lambda v: v['data'][0]['rating'], reverse=True)
         for i in range(30) if len(scorelist) >= 30 else range(len(scorelist)):
@@ -254,22 +280,24 @@ async def draw_info(arcid):
         msg = f'[CQ:image,file=file:///{outputiamge_path}]'
         return msg
     except Exception as e:
-        log.error(e)
+        log.error(traceback.print_exc())
         return f'Error {type(e)}'
 
-async def draw_score(user_id, est: bool = False):
+async def draw_score(user_id, est: bool = False) -> str:
     try:
         # 获取用户名
         asql = arcsql()
         if est:
             scoreinfo = await arcb30(user_id, est)
+            if isinstance(scoreinfo, str):
+                return scoreinfo
             userinfo = scoreinfo['data']
             arcid = user_id
         else:
-            bindinfo = asql.get_bind_id(user_id)
-            arcid, bind_id = bindinfo[0][0], bindinfo[0][1]
-            result = asql.get_login(bind_id)
-            scoreinfo = await get_web_api(result[0][0], result[0][1])
+            arcid, email, pwd = asql.get_bind_user(user_id)
+            scoreinfo = await get_web_api(email, pwd)
+            if isinstance(scoreinfo, str):
+                return scoreinfo
             friends = scoreinfo['value']['friends']
             for n, i in enumerate(friends):
                 if user_id == i['user_id']:
@@ -284,10 +312,9 @@ async def draw_score(user_id, est: bool = False):
 
         # 歌曲信息
         songinfo = asql.song_info(songid, sql_diff(difficulty))
-        for i in songinfo:
-            title = i[1] if i[1] else i[0]
-            artist = i[2]
-            songrating = i[3] / 10
+        title = songinfo[1] if songinfo[1] else songinfo[0]
+        artist = songinfo[2]
+        songrating = songinfo[3] / 10
         # 整理赋值
         songbg = os.path.join(songdir, songid, 'base.jpg' if difficulty != 3 else '3.jpg')
         score = recentscore['score']
@@ -304,42 +331,39 @@ async def draw_score(user_id, est: bool = False):
 Player: {arcname}
 Rating: {userrating}
 Code: {arcid}
-Play Time: {playtime(play_time)}
+PlayTime: {playtime(play_time)}
 ---------------------------------
 Song: {title}
 Artist: {artist}
 Difficulty: {diffdict[str(difficulty)][0].upper()} | SongRating: {songrating}
 ---------------------------------
 Score: {score:,}
-Rank: {'F' if health == -1 else isrank(score)}
+Rank: {'F' if health == -1 else isrank(score)} | Rating: {rating:.2f}
 Pure: {p_count} (+{sp_count})
 Far: {far_count}
-Lost: {miss_count}
-Rating: {rating:.2f}'''
+Lost: {miss_count}'''
         return msg
     except Exception as e:
-        log.error(e)
+        log.error(traceback.print_exc())
         return f'Error {type(e)}'
 
-async def bindinfo(qqid, arcid, arcname):
+async def bindinfo(qqid, arcid, arcname) -> str:
     asql = arcsql()
     asql.insert_temp_user(qqid, arcid, arcname.lower())
     return f'用户 {arcid} 已成功绑定QQ {qqid}，现可使用 <arcinfo> 指令查询B30成绩和 <arcre:> 指令使用 est 查分器查询最近，<arcre> 指令需等待管理员确认是否为好友才能使用'
 
-async def newbind():
+async def newbind() -> str:
     try:
         asql = arcsql()
-        result = asql.get_all_login()
-        for i in result:
-            bind_id = i[0]
-            info = await get_web_api(i[1], i[2])
-            friend = info['value']['friends']
-            for m in friend:
-                arcname = m['name']
-                user_id = m['user_id']
-                name = asql.get_user_name(user_id)
-                if name: continue
-                asql.insert_user(arcname.lower(), user_id, bind_id)
+        bind_id, email, password = asql.get_not_full_email()
+        info = await get_web_api(email, password)
+        friend = info['value']['friends']
+        for m in friend:
+            arcname = m['name']
+            user_id = m['user_id']
+            name = asql.get_user_name(user_id)
+            if name: continue
+            asql.insert_user(arcname.lower(), user_id, bind_id)
         log.info('添加成功')
         return '添加成功'
     except Exception as e:
