@@ -10,7 +10,7 @@ img = os.path.join(os.path.dirname(__file__), 'img')
 chardir = os.path.join(img, 'char')
 pttdir = os.path.join(img, 'ptt')
 rankdir = os.path.join(img, 'rank')
-songdir = os.path.join(img, 'songs')
+songdir = os.path.join(img, 'song')
 diffdir = os.path.join(img, 'diff')
 
 Exo_Regular = os.path.join(img, 'font', 'Exo-Regular.ttf')
