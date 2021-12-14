@@ -16,10 +16,18 @@ arcre: arcid  使用好友码查询TA人
 arcre: @  使用@ 查询好友
 arcup   查询用账号添加完好友，使用该指令绑定查询账号，添加成功即可使用arcre指令
 arcbind [arcid] [arcname]   绑定用户
+arcrd [定数] [难度] 随机一首指定定数的曲目，例如：arcrd 10.8 | arcrd 10+ | arcrd 9+ byd
 arcun   解除绑定
 '''
 
-sv = Service('arcaea', manage_priv=priv.ADMIN, enable_on_default=True, visible=True, help_=help)
+diffdict = {
+    '0' : ['pst', 'past'],
+    '1' : ['prs', 'present'],
+    '2' : ['ftr', 'future'],
+    '3' : ['byd', 'beyond']
+}
+
+sv = Service('arcaea', manage_priv=priv.ADMIN, enable_on_default=False, visible=True, help_=help)
 asql = arcsql()
 
 @sv.on_prefix(['arcinfo', 'ARCINFO', 'Arcinfo'])
@@ -81,6 +89,71 @@ async def arcre(bot, ev:CQEvent):
     info = await draw_score(user_id, est)
     await bot.send(ev, info, at_sender=True)
 
+@sv.on_prefix(['arcrd', 'Arcrd', 'ARCRD'])
+async def arcrd(bot, ev:CQEvent):
+    args: list[str] = ev.message.extract_plain_text().strip().split()
+    diff = None
+    if not args:
+        await bot.finish(ev, '请输入定数')
+    elif len(args) == 1:
+        try:
+            rating = float(args[0]) * 10
+            if not 10 <= rating < 116:
+                await bot.finish(ev, '请输入定数：1-11.5|9+|10+')
+            plus = False
+        except ValueError:
+            if '+' in args[0] and args[0][-1] == '+':
+                rating = float(args[0][:-1]) * 10
+                if rating % 10 != 0:
+                    await bot.finish(ev, '仅允许定数为：9+ | 10+')
+                if not 90 <= rating < 110:
+                    await bot.finish(ev, '仅允许定数为：9 | 10')
+                plus = True
+            else:
+                await bot.finish(ev, '请输入定数：1-11.5 | 9+ | 10+')
+    elif len(args) == 2:
+        try:
+            rating = float(args[0]) * 10
+            plus = False
+            if not 10 <= rating < 116:
+                await bot.finish(ev, '请输入定数：1-11.5 | 9+ | 10+')
+            if args[1].isdigit():
+                if args[1] not in diffdict:
+                    await bot.finish(ev, '请输入正确的难度：3 | byd | beyond')
+                else:
+                    diff = int(args[1])
+            else:
+                for d in diffdict:
+                    if args[1].lower() in diffdict[d]:
+                        diff = int(d)
+                        break
+        except ValueError:
+            if '+' in args[0] and args[0][-1] == '+':
+                rating = float(args[0][:-1]) * 10
+                if rating % 10 != 0:
+                    await bot.finish(ev, '仅允许定数为：9+ | 10+')
+                if not 90 <= rating < 110:
+                    await bot.finish(ev, '仅允许定数为：9 | 10')
+                plus = True
+                if args[1].isdigit():
+                    if args[1] not in diffdict:
+                        await bot.finish(ev, '请输入正确的难度：3 | byd | beyond')
+                    else:
+                        diff = int(args[1])
+                else:
+                    for d in diffdict:
+                        if args[1].lower() in diffdict[d]:
+                            diff = int(d)
+                            break
+            else:
+                await bot.finish(ev, '请输入定数：1-11.5 | 9+ | 10+')
+    else:
+        await bot.finish(ev, '请输入正确参数')
+    if not rating >= 70 and (diff == '2' or diff == '3'):
+        await bot.finish(ev, 'ftr | byd 难度没有定数小于7的曲目')
+    msg = random_music(rating, plus, diff)
+    await bot.send(ev, msg)
+
 @sv.on_fullmatch(['arcup', 'arcupdate', 'Arcup'])
 async def arcup(bot, ev:CQEvent):
     if not priv.check_priv(ev, priv.SUPERUSER):
@@ -94,9 +167,9 @@ async def bind(bot, ev:CQEvent):
     arcid = ev.message.extract_plain_text().strip().split()
     try:
         if not arcid[0].isdigit() and len(arcid[0]) != 9:
-            await bot.finish(ev, '请输入您的 arcid(好友码)', at_sender=True)
+            await bot.finish(ev, '请重新输入好友码和用户名\n例如：arcbind 114514810 sb616', at_sender=True)
         elif not arcid[1]:
-            await bot.finish(ev, '请输入您的 用户名', at_sender=True)
+            await bot.finish(ev, '请重新输入好友码和用户名\n例如：arcbind 114514810 sb616', at_sender=True)
     except IndexError:
         await bot.finish(ev, '请重新输入好友码和用户名\n例如：arcbind 114514810 sb616', at_sender=True)
     result = asql.get_user(qqid)

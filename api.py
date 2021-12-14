@@ -1,4 +1,4 @@
-import aiohttp, websockets, json, brotli
+import aiohttp, websockets, json, brotli, asyncio
 
 url = 'https://webapi.lowiro.com/'
 me = 'webapi/user/me'
@@ -25,6 +25,10 @@ async def arcb30(arcid: str, re: bool = False):
                 data = await ws.recv()
                 if data == 'error,add':
                     return '连接查分器错误'
+                elif data == 'error,Please update arcaea':
+                    return '查分器未更新游戏版本'
+                elif data == 'error,invalid user code':
+                    return '好友码无效'
                 elif data == 'bye':
                     return b30_data
                 elif isinstance(data, bytes):

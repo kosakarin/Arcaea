@@ -181,3 +181,32 @@ class arcsql():
         except Exception as e:
             hoshino.logger.error(e)
             return False
+
+    def get_song(self, rating: float, plus: bool = False, diff: str = None) -> list:
+        try:
+            if diff:
+                if plus:
+                    sql = f'select * from song where {diff} >= {rating + 7} and {diff} < {rating + 10}'
+                else:
+                    sql = f'select * from song where {diff} >= {rating} and {diff} < {rating + 7}'
+            elif plus:
+                rmin, rmax = rating + 7, rating + 10
+                sql = f'select * from song where (pst >= {rmin} and pst < {rmax}) or (prs >= {rmin} and prs < {rmax}) or (ftr >= {rmin} and ftr < {rmax}) or (byd >= {rmin} and byd < {rmax})'
+            elif rating >= 90:
+                if rating % 10 != 0:
+                    sql = f'select * from song where pst = {rating} or prs = {rating} or ftr = {rating} or byd = {rating}'
+                else:
+                    rmin, rmax = rating, rating + 7
+                    sql = f'select * from song where (pst >= {rmin} and pst < {rmax}) or (prs >= {rmin} and prs < {rmax}) or (ftr >= {rmin} and ftr < {rmax}) or (byd >= {rmin} and byd < {rmax})'
+            else:
+                rmin, rmax = rating, rating + 10
+                sql = f'select * from song where (pst >= {rmin} and pst < {rmax}) or (prs >= {rmin} and prs < {rmax}) or (ftr >= {rmin} and ftr < {rmax}) or (byd >= {rmin} and byd < {rmax})'
+            
+            result = self.song_conn().execute(sql).fetchall()
+            if not result:
+                return False
+            else:
+                return result
+        except Exception as e:
+            hoshino.logger.error(e)
+            return False

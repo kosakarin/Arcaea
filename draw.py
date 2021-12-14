@@ -1,7 +1,9 @@
-import hoshino, os, traceback
+import hoshino, os, traceback, random, base64
+from hoshino.typing import MessageSegment
 from time import strftime, localtime, time, mktime
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
+from io import BytesIO
 
 from .api import *
 from .sql import *
@@ -12,6 +14,8 @@ pttdir = os.path.join(img, 'ptt')
 rankdir = os.path.join(img, 'rank')
 songdir = os.path.join(img, 'song')
 diffdir = os.path.join(img, 'diff')
+
+asql = arcsql()
 
 Exo_Regular = os.path.join(img, 'font', 'Exo-Regular.ttf')
 GeosansLight = os.path.join(img, 'font', 'GeosansLight.ttf')
@@ -90,35 +94,6 @@ def isrank(score: int) -> str:
         rank = 'EX+'
     return rank
 
-def calc_rating(songrating: float = 0, rating: float = 0, score: int = 0) -> str:
-    if score and (rating or songrating):
-        if songrating:
-            if score >= 10000000:
-                result = songrating + 2
-            elif score >= 9800000:
-                result = songrating + 1 + (score - 9800000) / 200000
-            else:
-                result = songrating + (score - 9500000) / 300000
-            msg = f'Rating: {result}'
-        else:
-            if score >= 10000000:
-                result = rating - 2
-            elif score >= 9800000:
-                result = rating - 1 - (score - 9800000) / 200000
-            else:
-                result = rating - (score - 9500000) / 300000
-            msg = f'Song Rating: {result}'
-    else:
-        r = songrating - rating
-        if r == -2:
-            result = 1000
-        elif r > -2:
-            result = (rating - songrating - 1 + 980 / 20) * 20
-        else:
-            result = (rating - songrating + 950 / 30) * 30
-        msg = f'Score: {result}'
-    return msg
-
 def sql_diff(diff):
     if diff == 0:
         sql_diff = 'pst'
@@ -139,6 +114,13 @@ def timediff(date):
     now = mktime(datetime.now().timetuple())
     time_diff = (now - date / 1000) / 86400
     return time_diff
+
+def img2b64(img: Image.Image) -> str:
+    bytesio = BytesIO()
+    img.save(bytesio, 'PNG')
+    bytes = bytesio.getvalue()
+    base64_str = base64.b64encode(bytes).decode()
+    return 'base64://' + base64_str
 
 async def draw_info(arcid: int) -> str:
     try:
@@ -275,18 +257,16 @@ async def draw_info(arcid: int) -> str:
                 new_bg = open_img(newbg)
                 im.alpha_composite(new_bg, (bg_x - 23, bg_y))
         # save
-        outputiamge_path = os.path.join(img, 'out', f'{arcid}.png')
-        im.save(outputiamge_path)
-        msg = f'[CQ:image,file=file:///{outputiamge_path}]'
-        return msg
+        base64str = img2b64(im)
+        msg = MessageSegment.image(base64str)
     except Exception as e:
         log.error(traceback.print_exc())
-        return f'Error {type(e)}'
+        msg = f'Error {type(e)}'
+    return msg
 
 async def draw_score(user_id, est: bool = False) -> str:
     try:
         # 获取用户名
-        asql = arcsql()
         if est:
             scoreinfo = await arcb30(user_id, est)
             if isinstance(scoreinfo, str):
@@ -347,14 +327,47 @@ Lost: {miss_count}'''
         log.error(traceback.print_exc())
         return f'Error {type(e)}'
 
+def random_music(rating: int, plus: bool, diff: int) -> str:
+
+    difficulty = 0
+    if diff:
+        difficulty = diff
+        song = asql.get_song(rating, plus, diffdict[str(diff)][0])
+    elif plus:
+        song = asql.get_song(rating, plus)
+    else:
+        song = asql.get_song(rating)
+
+    if rating % 10 != 0 and diff:
+        for i in song:
+            if i[diff + 4] != rating:
+                song.remove(i)
+
+    if not song:
+        return '未找到符合的曲目'
+
+    random_list_int = random.randint(0, len(song) - 1)
+    songinfo = song[random_list_int]
+
+    songrating = [str(i / 10) for n, i in enumerate(songinfo) if n >= 4 and i != -1]
+    diffc = [diffdict[str(_)][0].upper() for _ in range(len(songrating))]
+
+    songbg = os.path.join(songdir, songinfo[0], 'base.jpg' if difficulty != 3 else '3.jpg')
+
+    msg = f'''[CQ:image,file=file:///{songbg}]
+Song: {songinfo[2] if songinfo[2] else songinfo[1]}
+Artist: {songinfo[3]}
+Difficulty: {' | '.join(diffc)}
+Rating: {' | '.join(songrating)}'''
+
+    return msg
+
 async def bindinfo(qqid, arcid, arcname) -> str:
-    asql = arcsql()
     asql.insert_temp_user(qqid, arcid, arcname.lower())
     return f'用户 {arcid} 已成功绑定QQ {qqid}，现可使用 <arcinfo> 指令查询B30成绩和 <arcre:> 指令使用 est 查分器查询最近，<arcre> 指令需等待管理员确认是否为好友才能使用'
 
 async def newbind() -> str:
     try:
-        asql = arcsql()
         bind_id, email, password = asql.get_not_full_email()
         info = await get_web_api(email, password)
         friend = info['value']['friends']
