@@ -1,14 +1,16 @@
 import sqlite3, os, hoshino
-from typing import Union
+from typing import Union, List
 
 SQL = os.path.expanduser('~/.hoshino/arcaea.db')
 SONGSQL = os.path.join(os.path.dirname(__file__), 'arcsong.db')
 
-class arcsql():
+class arcsql:
+
     def __init__(self):
         os.makedirs(os.path.dirname(SQL), exist_ok=True)
         self.makesql()
         self.makelogin()
+        self.maketemp()
     
     def arc_conn(self):
         return sqlite3.connect(SQL)
@@ -26,6 +28,8 @@ class arcsql():
                 USER_ID     INTEGER,
                 BIND_ID     INTEGER
             )''')
+        except sqlite3.OperationalError:
+            pass
         except Exception as e:
             hoshino.logger.error(e)
     
@@ -38,14 +42,30 @@ class arcsql():
                 PASSWORD    TEXT        NOT NULL,
                 IS_FULL     INTEGER     NOT NULL
             )''')
+        except sqlite3.OperationalError:
+            pass
         except Exception as e:
             hoshino.logger.error(e)
     
+    def maketemp(self):
+        try:
+            self.arc_conn().execute('''CREATE TABLE TEMPBIND(
+                ID          INTEGER     PRIMARY KEY     NOT NULL,
+                QQID        INTEGER     NOT NULL,
+                GID        INTEGER     NOT NULL
+            )''')
+        except sqlite3.OperationalError:
+            pass
+        except Exception as e:
+            hoshino.logger.error(e)
+
     # 临时绑定账号
-    def insert_temp_user(self, qqid, arcid, arcname):
+    def insert_temp_user(self, qqid: int, arcid: int, arcname: str, gid: int) -> bool:
         try:
             conn = self.arc_conn()
             conn.execute(f'INSERT INTO USER VALUES (NULL, {qqid}, "{arcid}", "{arcname.lower()}", NULL, NULL)')
+            conn.commit()
+            conn.execute(f'INSERT INTO TEMPBIND VALUES (NULL, {qqid}, {gid})')
             conn.commit()
             return True
         except Exception as e:
@@ -53,7 +73,7 @@ class arcsql():
             return False
 
     # 正式绑定账号
-    def insert_user(self, arcname, user_id, bind_id):
+    def insert_user(self, arcname: str, user_id: int, bind_id: int) -> bool:
         try:
             conn = self.arc_conn()
             conn.execute(f'UPDATE USER SET ARCNAME = "{arcname}", USER_ID = {user_id}, BIND_ID = {bind_id} WHERE ARCNAME = "{arcname}"')
@@ -64,7 +84,7 @@ class arcsql():
             hoshino.logger.error(e)
             return False
 
-    def __is_full__(self, bind_id):
+    def __is_full__(self, bind_id: int):
         try:
             info = self.arc_conn().execute(f'SELECT * FROM USER WHERE BIND_ID = {bind_id}').fetchall()
             if len(info) == 10:
@@ -79,6 +99,23 @@ class arcsql():
             conn.commit()
         except Exception as e:
             hoshino.logger.error(e)
+
+    def delete_temp_user(self, qqid: int):
+        try:
+            conn = self.arc_conn()
+            conn.execute(f'DELETE FROM TEMPBIND WHERE QQID = {qqid}')
+            conn.commit()
+        except Exception as e:
+            hoshino.logger.error(e)
+
+    def get_gid(self, user_id: int) -> List[int]:
+        try:
+            qqid = self.arc_conn().execute(f'SELECT QQID FROM USER WHERE USER_ID = {user_id}').fetchall()
+            gid = self.arc_conn().execute(f'SELECT GID FROM TEMPBIND WHERE QQID = {qqid[0][0]}').fetchall()
+            return [qqid[0][0], gid[0][0]]
+        except Exception as e:
+            hoshino.logger.error(e)
+            return False
 
     # 获取数据
     def get_bind_user(self, user_id) -> Union[tuple, bool]:
@@ -118,7 +155,7 @@ class arcsql():
             return False
 
     # 获取好友码和user_id
-    def get_user(self, qqid) -> Union[list, bool]:
+    def get_user(self, qqid: int) -> Union[list, bool]:
         '''
         使用QQ号 `qqid` 获取好友码 `arcid` 和 `user_id`
         '''
@@ -133,7 +170,7 @@ class arcsql():
             return False
     
     # 获取游戏名
-    def get_user_name(self, user_id):
+    def get_user_name(self, user_id: int):
         '''
         使用 `user_id` 获取游戏名 `arcname`
         '''
@@ -145,7 +182,7 @@ class arcsql():
             return False
 
     # 获取user_id
-    def get_user_code(self, arcid):
+    def get_user_code(self, arcid: int) -> Union[bool, dict]:
         '''
         使用好友码 `arcid` 获取 `user_id`
         '''
@@ -160,7 +197,7 @@ class arcsql():
             return False
 
     # 删除账号
-    def delete_user(self, qqid):
+    def delete_user(self, qqid: int) -> bool:
         try:
             conn = self.arc_conn()
             conn.execute(f'DELETE FROM USER WHERE QQID = {qqid}')
@@ -171,7 +208,7 @@ class arcsql():
             return False
 
     # 查询歌曲
-    def song_info(self, songid, diff):
+    def song_info(self, songid: str, diff: str) -> Union[bool, dict]:
         try:
             result = self.song_conn().execute(f'select name_en, name_jp, artist, {diff} from song where songid = "{songid}"').fetchall()
             if not result:
@@ -182,7 +219,7 @@ class arcsql():
             hoshino.logger.error(e)
             return False
 
-    def get_song(self, rating: float, plus: bool = False, diff: str = None) -> list:
+    def get_song(self, rating: float, plus: bool = False, diff: str = None) -> Union[bool, list]:
         try:
             if diff:
                 if plus:

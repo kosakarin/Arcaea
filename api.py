@@ -1,20 +1,25 @@
-import aiohttp, websockets, json, brotli, asyncio
+import aiohttp, websockets, json, brotli
+from typing import Union
 
-url = 'https://webapi.lowiro.com/'
+api = 'https://webapi.lowiro.com/'
 me = 'webapi/user/me'
 login = 'auth/login'
 est = 'wss://arc.estertion.win:616/'
 
-async def get_web_api(email, password):
+async def get_web_api(email: str, password: str) -> Union[str, dict]:
     data = {'email': email, 'password': password}
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url + login, data=data) as req:
-            if req.status != 200:
-                return '查询用账号异常，请联系BOT管理员'
-        async with session.get(url + me) as reqs:
-            return await reqs.json()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api + login, data=data) as req:
+                if req.status != 200:
+                    return '查询用账号异常，请联系BOT管理员'
+            async with session.get(api + me) as reqs:
+                return await reqs.json()
+    except Exception as e:
+        return f'Error {type(e)}'
 
-async def arcb30(arcid: str, re: bool = False):
+
+async def arcb30(arcid: str, re: bool = False) -> Union[str, dict]:
     try:
         b30_data = []
         async with websockets.connect(est, timeout=10) as ws:

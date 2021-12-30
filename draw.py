@@ -1,24 +1,21 @@
 import hoshino, os, traceback, random, base64
-from hoshino.typing import MessageSegment
 from time import strftime, localtime, time, mktime
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from datetime import datetime
+from nonebot import NoneBot
 from io import BytesIO
+from typing import Union
+from shutil import copyfile
+from hoshino.config import SUPERUSERS
+from hoshino.typing import MessageSegment
 
 from .api import *
 from .sql import *
 
-img = os.path.join(os.path.dirname(__file__), 'img')
-chardir = os.path.join(img, 'char')
-pttdir = os.path.join(img, 'ptt')
-rankdir = os.path.join(img, 'rank')
-songdir = os.path.join(img, 'song')
-diffdir = os.path.join(img, 'diff')
+arc = os.path.dirname(__file__)
+songdir = os.path.join(arc, 'img', 'songs')
 
 asql = arcsql()
-
-Exo_Regular = os.path.join(img, 'font', 'Exo-Regular.ttf')
-GeosansLight = os.path.join(img, 'font', 'GeosansLight.ttf')
 
 diffdict = {
     '0' : ['pst', 'past'],
@@ -29,88 +26,291 @@ diffdict = {
 
 log = hoshino.new_logger('Arcaea_draw')
 
-class datatext:
-    #L=X轴，T=Y轴，size=字体大小，fontpath=字体文件，
-    def __init__(self, L, T, size, text, path, anchor = 'lt'):
-        self.L = L
-        self.T = T
-        self.text = str(text)
-        self.path = path
-        self.font = ImageFont.truetype(self.path, size)
-        self.anchor = anchor
+class Data:
+    
+    _img = os.path.join(arc, 'img')
+    _recent_dir = os.path.join(_img, 'recent')
+    _diff_dir = os.path.join(_img, 'diff')
+    _song_dir = os.path.join(_img, 'songs')
+    _rank_dir = os.path.join(_img, 'rank')
+    _font_dir = os.path.join(_img, 'font')
+    _char_dir = os.path.join(_img, 'char')
+    _ptt_dir = os.path.join(_img, 'ptt')
 
-def write_text(image, font, text='text', pos=(0, 0), color=(255, 255, 255, 255), anchor='lt'):
-    rgba_image = image
-    text_overlay = Image.new('RGBA', rgba_image.size, (255, 255, 255, 0))
-    image_draw = ImageDraw.Draw(text_overlay)
-    image_draw.text(pos, text, font=font, fill=color, anchor=anchor)
-    return Image.alpha_composite(rgba_image, text_overlay)
+    Exo_Regular = os.path.join(_font_dir, 'Exo-Regular.ttf')
+    Kazesawa_Regular = os.path.join(_font_dir, 'Kazesawa-Regular.ttf')
 
-def draw_text(image, class_text: datatext, color=(255, 255, 255, 255)):
-    font = class_text.font
-    text = class_text.text
-    anchor = class_text.anchor
-    return write_text(image, font, text, (class_text.L, class_text.T), color, anchor)
+    def __init__(self, project: str, info: dict) -> None:
 
-def open_img(img):
-    with open(img, 'rb') as f:
-        im = Image.open(f).convert('RGBA')
-    return im
+        if project == 'recent':
+            _playinfo = info['recent_score'][0]
+            self.arcname: str = info['name']
+            self.ptt: int = info['rating']
+            self.character: int = info['character']
+            self.is_char_uncapped: bool = info['is_char_uncapped']
+            self.is_char_uncapped_override: bool = info['is_char_uncapped_override']
+            self.songid: str = _playinfo['song_id']
+            self.difficulty: int = _playinfo['difficulty']
+            self.score: int = _playinfo['score']
+            self.sp_count: int = _playinfo['shiny_perfect_count']
+            self.p_count: int = _playinfo['perfect_count']
+            self.far_count: int = _playinfo['near_count']
+            self.miss_count: int = _playinfo['miss_count']
+            self.health: int = _playinfo['health']
+            self.play_time: int = _playinfo['time_played']
+            self.rating: float = _playinfo['rating']
 
-def pttbg(ptt: int) -> str:
-    if ptt == -1:
-        return 'rating_off.png'
-    ptt /= 100
-    if ptt < 3:
-        name = 'rating_0.png'
-    elif ptt < 7:
-        name = 'rating_1.png'
-    elif ptt < 10:
-        name = 'rating_2.png'
-    elif  ptt < 11:
-        name = 'rating_3.png'
-    elif  ptt < 12:
-        name = 'rating_4.png'
-    elif  ptt < 12.5:
-        name = 'rating_5.png'
-    else:
-        name = 'rating_6.png'
-    return name
+            self.__recent__()
 
-def isrank(score: int) -> str:
-    if score < 8600000:
-        rank = 'D'
-    elif score < 8900000:
-        rank = 'C'
-    elif score < 9200000:
-        rank = 'B'
-    elif score < 9500000:
-        rank = 'A'
-    elif score < 9800000:
-        rank = 'AA'
-    elif score < 9900000:
-        rank = 'EX'
-    else:
-        rank = 'EX+'
-    return rank
+        elif project == 'best30':
+            _playinfo = info[0]['data']
+            self.scorelist: list = info[1:]
+            self.arcname: str = _playinfo['name']
+            self.character: int = _playinfo['character']
+            self.is_char_uncapped: bool = _playinfo['is_char_uncapped']
+            self.is_char_uncapped_override: bool = _playinfo['is_char_uncapped_override']
+            self.ptt: int = _playinfo['rating']
 
-def sql_diff(diff):
-    if diff == 0:
-        sql_diff = 'pst'
-    elif diff == 1:
-        sql_diff = 'prs'
-    elif diff == 2:
-        sql_diff = 'ftr'
-    else:
-        sql_diff = 'byd'
-    return sql_diff
+            self.__best30__()
+        elif project == 'random':
+            self._song_img = os.path.join(self._song_dir, info['song_id'], 'base.jpg' if info['difficulty'] != 3 else '3.jpg')
+        else:
+            raise TypeError
+        
+    def __recent__(self) -> None:
 
-def playtime(date):
-    timearray = localtime(date / 1000)
-    datetime = strftime('%Y-%m-%d %H:%M:%S', timearray)
-    return datetime
+        self._song_img = os.path.join(self._song_dir, self.songid, 'base.jpg' if self.difficulty != 3 else '3.jpg')
+        _rank_img = os.path.join(self._rank_dir, f'grade_{self.isrank(self.score) if self.health != -1 else "F"}.png')
+        _ptt_img = os.path.join(self._ptt_dir, self.pttbg(self.ptt))
+        _bg_img = os.path.join(self._recent_dir, 'bg.png')
+        _diff_img = os.path.join(self._recent_dir, f'{self.diff(self.difficulty)}.png')
+        _black_line = os.path.join(self._recent_dir, 'black_line.png')
+        _white_line = os.path.join(self._recent_dir, 'white_line.png')
+        _time_img = os.path.join(self._recent_dir, 'time.png')
+        
+        character_name = f'{self.character}u_icon.png' if self.is_char_uncapped ^ self.is_char_uncapped_override else f'{self.character}_icon.png'
+        _character_img = os.path.join(self._char_dir, character_name)
 
-def timediff(date):
+        self.song_img = self.open_img(self._song_img)
+        self.rank_img = self.open_img(_rank_img)
+        self.ptt_img = self.open_img(_ptt_img)
+        self.bg_img = self.open_img(_bg_img)
+        self.diff_img = self.open_img(_diff_img)
+        self.black_line = self.open_img(_black_line)
+        self.white_line = self.open_img(_white_line)
+        self.time_img = self.open_img(_time_img)
+        self.character_img = self.open_img(_character_img).resize((200, 200))
+
+    def __best30__(self) -> None:
+
+        _bg_img = os.path.join(self._img, 'b30_bg.png')
+        _ptt_img = os.path.join(self._ptt_dir, self.pttbg(self.ptt))
+        _black_line = os.path.join(self._img, 'black_line.png')
+        _time_img = os.path.join(self._img, 'time.png')
+        character_name = f'{self.character}u_icon.png' if self.is_char_uncapped ^ self.is_char_uncapped_override else f'{self.character}_icon.png'
+        _character_img = os.path.join(self._char_dir, character_name)
+
+        self.bg_img = self.open_img(_bg_img)
+        self.ptt_img = self.open_img(_ptt_img).resize((150, 150))
+        self.black_line = self.open_img(_black_line)
+        self.time_img = self.open_img(_time_img)
+        self.character_img = self.open_img(_character_img).resize((250, 250))
+
+    def songdata(self, info: dict) -> None:
+
+        self.songid: str = info['song_id']
+        self.difficulty: int = info['difficulty']
+        self.song_rating: float = info['constant']
+        self.score: int = info['score']
+        self.sp_count: int = info['shiny_perfect_count']
+        self.p_count: int = info['perfect_count']
+        self.far_count: int = info['near_count']
+        self.miss_count: int = info['miss_count']
+        self.health: int = info['health']
+        self.play_time: int = info['time_played']
+        self.rating: float = info['rating']
+
+        self.__b30_score__()
+
+    def __b30_score__(self) -> None:
+
+        _b30_img = os.path.join(self._img, 'b30_score_bg.png')
+        _rank_img = os.path.join(self._rank_dir, f'grade_{self.isrank(self.score) if self.health != -1 else "F"}.png')
+        _song_img = os.path.join(self._song_dir, self.songid, 'base.jpg' if self.difficulty != 3 else '3.jpg')
+        _diff_img = os.path.join(self._diff_dir, f'{self.diff(self.difficulty).upper()}.png')
+        _new_img = os.path.join(self._img, 'new.png')
+
+        self.b30_img = self.open_img(_b30_img)
+        self.rank_img = self.open_img(_rank_img).resize((70, 40))
+        self.song_img = self.open_img(_song_img).resize((175, 175))
+        self.diff_img = self.open_img(_diff_img)
+        self.new_img = self.open_img(_new_img)
+
+    @staticmethod
+    def open_img(img: str) -> Image.Image:
+        with open(img, 'rb') as f:
+            im = Image.open(f).convert('RGBA')
+        return im
+
+    @staticmethod
+    def pttbg(ptt: int) -> str:
+        if ptt == -1:
+            return 'rating_off.png'
+        ptt /= 100
+        if ptt < 3:
+            name = 'rating_0.png'
+        elif ptt < 7:
+            name = 'rating_1.png'
+        elif ptt < 10:
+            name = 'rating_2.png'
+        elif  ptt < 11:
+            name = 'rating_3.png'
+        elif  ptt < 12:
+            name = 'rating_4.png'
+        elif  ptt < 12.5:
+            name = 'rating_5.png'
+        else:
+            name = 'rating_6.png'
+        return name
+
+    @staticmethod
+    def isrank(score: int) -> str:
+        if score < 86e5:
+            rank = 'd'
+        elif score < 89e5:
+            rank = 'c'
+        elif score < 92e5:
+            rank = 'b'
+        elif score < 95e5:
+            rank = 'a'
+        elif score < 98e5:
+            rank = 'aa'
+        elif score < 99e5:
+            rank = 'ex'
+        else:
+            rank = 'ex+'
+        return rank
+
+    @staticmethod
+    def diff(difficulty: int) -> str:
+        if difficulty == 0:
+            diff = 'pst'
+        elif difficulty == 1:
+            diff = 'prs'
+        elif difficulty == 2:
+            diff = 'ftr'
+        else:
+            diff = 'byd'
+        return diff
+
+    @staticmethod
+    def draw_fillet(img: Image.Image, radii: int, position: str = 'all') -> Image.Image:
+
+        circle = Image.new('L', (radii * 2, radii * 2), 0)  # 创建一个黑色背景的画布
+        draw = ImageDraw.Draw(circle)
+        draw.ellipse((0, 0, radii * 2, radii * 2), fill=255)  # 画白色圆形
+        # 原图
+        img = img.convert("RGBA")
+        w, h = img.size
+        alpha = Image.new('L', img.size, 255)
+        if position == 'all':
+            left_top = (0, 0, radii, radii)
+            right_top = (radii, 0, radii * 2, radii)
+            right_down = (radii, radii, radii * 2, radii * 2)
+            left_down = (0, radii, radii, radii * 2)
+        elif position == 'lt':
+            left_top = (0, 0, radii, radii)
+            right_top = (0, 0, 0, 0)
+            right_down = (0, 0, 0, 0)
+            left_down = (0, 0, 0, 0)
+        elif position == 'rt':
+            left_top = (0, 0, 0, 0)
+            right_top = (radii, 0, radii * 2, radii)
+            right_down = (0, 0, 0, 0)
+            left_down = (0, 0, 0, 0)
+        elif position == 'rd':
+            left_top = (0, 0, 0, 0)
+            right_top = (0, 0, 0, 0)
+            right_down = (radii, radii, radii * 2, radii * 2)
+            left_down = (0, 0, 0, 0)
+        elif position == 'ld':
+            left_top = (0, 0, 0, 0)
+            right_top = (0, 0, 0, 0)
+            right_down = (0, 0, 0, 0)
+            left_down = (0, radii, radii, radii * 2)
+        else:
+            raise TypeError
+
+        # 画4个角（将整圆分离为4个部分）
+        alpha = Image.new('L', img.size, 255)
+        alpha.paste(circle.crop(left_top), (0, 0))  # 左上角
+        alpha.paste(circle.crop(right_top), (w - radii, 0))  # 右上角
+        alpha.paste(circle.crop(right_down), (w - radii, h - radii))  # 右下角
+        alpha.paste(circle.crop(left_down), (0, h - radii))  # 左下角
+        # 白色区域透明可见，黑色区域不可见
+        img.putalpha(alpha)
+
+        return img
+
+    @staticmethod
+    def playtime(date: int) -> str:
+        timearray = localtime(date / 1000)
+        datetime = strftime('%Y-%m-%d %H:%M:%S', timearray)
+        return datetime
+
+    @property
+    def songbg(self) -> str:
+        return self._song_img
+
+    @property
+    def song_bg_img(self) -> Image.Image:
+        bg_w, bg_h = self.song_img.size
+        fix_w, fix_h = [1200, 900]
+
+        scale = fix_w / bg_w
+        w = int(scale * bg_w)
+        h = int(scale * bg_h)
+
+        re = self.song_img.resize((w, h))
+        crop_height = (h - fix_h) / 2
+
+        crop_img = re.crop((0, crop_height, w, h - crop_height))
+
+        bg_gb = crop_img.filter(ImageFilter.GaussianBlur(3))
+        bg_bn = ImageEnhance.Brightness(bg_gb).enhance(2 / 4.0)
+
+        return bg_bn
+
+class DrawText:
+
+    def __init__(self, 
+                image: Image.Image,
+                X: float,
+                Y: float,
+                size: int,
+                text: str,
+                font: str,
+                color: tuple = (255, 255, 255, 255),
+                stroke_width: int = 0,
+                stroke_fill: tuple = (0, 0, 0, 0),
+                anchor: str = 'lt') -> None:
+        self._img = image
+        self._pos = (X, Y)
+        self._text = str(text)
+        self._font = ImageFont.truetype(font, size)
+        self._color = color
+        self._stroke_width = stroke_width
+        self._stroke_fill = stroke_fill
+        self._anchor = anchor
+
+    def draw_text(self) -> Image.Image:
+
+        text_img = Image.new('RGBA', self._img.size, (255, 255, 255, 0))
+        draw_img = ImageDraw.Draw(text_img)
+        draw_img.text(self._pos, self._text, self._color, self._font, self._anchor, stroke_width=self._stroke_width, stroke_fill=self._stroke_fill)
+        return Image.alpha_composite(self._img, text_img)
+
+def timediff(date: int) -> float:
     now = mktime(datetime.now().timetuple())
     time_diff = (now - date / 1000) / 86400
     return time_diff
@@ -125,137 +325,102 @@ def img2b64(img: Image.Image) -> str:
 async def draw_info(arcid: int) -> str:
     try:
         best30sum = 0
-        log.info(f'Start Arcaea API {playtime(time() * 1000)}')
-        alldata = await arcb30(arcid)
-        log.info(f'End Arcaea API {playtime(time() * 1000)}')
-        if not isinstance(alldata, list):
-            return alldata
-        arcname = alldata[0]['data']['name']
-        character = alldata[0]['data']['character']
-        is_char_uncapped = alldata[0]['data']['is_char_uncapped']
-        is_char_uncapped_override = alldata[0]['data']['is_char_uncapped_override']
-        icon_name = f'{character}u_icon.png' if is_char_uncapped ^ is_char_uncapped_override else f'{character}_icon.png'
-        userrating = alldata[0]['data']['rating']
-        scorelist = alldata[1:]
-        scorelist.sort(key = lambda v: v['data'][0]['rating'], reverse=True)
-        for i in range(30) if len(scorelist) >= 30 else range(len(scorelist)):
-            best30sum += scorelist[i]['data'][0]['rating']
+        log.info(f'Start Arcaea API {Data.playtime(time() * 1000)}')
+        info = await arcb30(arcid)
+        log.info(f'End Arcaea API {Data.playtime(time() * 1000)}')
+        if not isinstance(info, list):
+            return info
+        data = Data('best30', info)
         
+        data.scorelist.sort(key = lambda v: v['data'][0]['rating'], reverse=True)
+        for i in range(30) if len(data.scorelist) >= 30 else range(len(data.scorelist)):
+            best30sum += data.scorelist[i]['data'][0]['rating']
+        
+        ptt = data.ptt / 100 if data.ptt != -1 else '--'
         b30 = best30sum / 30
-        r10 = (userrating / 100 - b30 * 0.75) / 0.25
-        #------------------------------------------------
-        # 图片整理
-        icon = os.path.join(chardir, icon_name)
-        ptt = os.path.join(pttdir, pttbg(userrating))
-        # 新建底图
-        bg = os.path.join(img, 'b30_bg.png')
+        r10 = (ptt - b30 * 0.75) / 0.25
+        # 底图
         im = Image.new('RGBA', (1800, 3000))
-        b30_bg = open_img(bg)
-        im.alpha_composite(b30_bg)
-        # 角色
-        icon_bg = open_img(icon).resize((250, 250))
-        im.alpha_composite(icon_bg, (175, 275))
+        im.alpha_composite(data.bg_img)
+        # 搭档
+        im.alpha_composite(data.character_img, (175, 275))
         # ptt背景
-        ptt_bg = open_img(ptt).resize((150, 150))
-        im.alpha_composite(ptt_bg, (300, 400))
+        im.alpha_composite(data.ptt_img, (300, 380))
         # ptt
-        w_ptt = datatext(375, 475, 45, userrating / 100 if userrating != -1 else '--', Exo_Regular, anchor='mm')
-        im = draw_text(im, w_ptt)
+        im = DrawText(im, 375, 455, 45, f'{ptt:.2f}', data.Exo_Regular, anchor='mm', stroke_width=1, stroke_fill=(0, 0, 0, 255)).draw_text()
         # arcname
-        w_arcname = datatext(455, 400, 85, arcname, GeosansLight, anchor='lb')
-        im = draw_text(im, w_arcname)
+        im = DrawText(im, 455, 380, 85, data.arcname, data.Exo_Regular, anchor='lb').draw_text()
         # arcid
-        w_arcid = datatext(480, 475, 60, f'ID:{arcid}', Exo_Regular, anchor='lb')
-        im = draw_text(im, w_arcid)
+        im = DrawText(im, 480, 455, 60, f'ID:{arcid}', data.Exo_Regular, anchor='lb').draw_text()
         # r10
-        w_r10 = datatext(1100, 400, 60, f'Recent 10: {r10:.3f}', Exo_Regular, anchor='lb')
-        im = draw_text(im, w_r10)
+        im = DrawText(im, 1100, 380, 60, f'Recent 10: {r10:.3f}', data.Exo_Regular, anchor='lb').draw_text()
         # b30
-        w_b30 = datatext(1100, 425, 60, f'Best 30: {b30:.3f}', Exo_Regular)
-        im = draw_text(im, w_b30)
+        im = DrawText(im, 1100, 405, 60, f'Best 30: {b30:.3f}', data.Exo_Regular).draw_text()
         # 30个成绩
-        bg_y = 580
-        for num, i in enumerate(scorelist):
+        bg_y = 540
+        for num, i in enumerate(data.scorelist):
             if num == 30:
                 break
             # 横3竖10
             if num % 3 == 0:
-                bg_y += 240 if num != 0 else 0
-                bg_x = 30
+                bg_y += 245 if num != 0 else 0
+                bg_x = 20
+            # elif num % 3 == 1:
+            #     bg_x += 615
             else:
-                bg_x += 600
+                bg_x += 590
 
-            data = i['data'][0]
-            # 歌曲信息
-            songid = data['song_id']
-            difficulty = data['difficulty']
-            # 成绩整理
-            song_rating = data['constant']
-            score = data['score']
-            sp_count = data['shiny_perfect_count']
-            p_count = data['perfect_count']
-            far_count = data['near_count']
-            lost_count = data['miss_count']
-            health = data['health']
-            play_time = data['time_played']
-            rating = data['rating']
-            # 图片整理
-            score30 = os.path.join(img, 'b30_score_bg.png')
-            rank = os.path.join(rankdir, f'grade_{isrank(score).lower()}.png' if health != -1 else 'grade_f.png')
-            songbg = os.path.join(songdir, songid, 'base.jpg')
-            diffbg = os.path.join(diffdir, diffdict[str(difficulty)][0].upper() + '.png')
-            newbg = os.path.join(img, 'new.png')
-            # 底图
-            score30_bg = open_img(score30)
-            im.alpha_composite(score30_bg, (10 + bg_x, bg_y))
-            # 曲图
-            song_bg = open_img(songbg).resize((190, 190))
-            im.alpha_composite(song_bg, (35 + bg_x, 5 + bg_y))
+            data.songdata(i['data'][0])
+
+            # 背景
+            im.alpha_composite(data.b30_img, (bg_x + 40, bg_y))
             # 难度
-            diff_bg = open_img(diffbg).resize((72, 72))
-            im.alpha_composite(diff_bg, (161 + bg_x, bg_y - 3))
+            im.alpha_composite(data.diff_img, (bg_x + 40, bg_y + 25))
+            # 曲绘
+            im.alpha_composite(data.song_img, (bg_x + 70, bg_y + 50))
             # rank
-            rank_bg = open_img(rank).resize((135, 65))
-            im.alpha_composite(rank_bg, (395 + bg_x, 95 + bg_y))
+            im.alpha_composite(data.rank_img, (bg_x + 425, bg_y + 120))
+            # 黑线
+            im.alpha_composite(data.black_line, (bg_x + 70, bg_y + 48))
+            # 时间
+            im.alpha_composite(data.time_img, (bg_x + 245, bg_y + 205))
+            # 曲名
+            songinfo = asql.song_info(data.songid, data.diff(data.difficulty))
+            title = songinfo[1] if songinfo[1] else songinfo[0]
+            im = DrawText(im, bg_x + 290, bg_y + 35, 20, title, data.Kazesawa_Regular, (0, 0, 0, 255), anchor='mm').draw_text()
             # songrating
-            w_songrating = datatext(223 + bg_x, 12 + bg_y, 20, f'{song_rating:.1f}', Exo_Regular, anchor='rt')
-            im = draw_text(im, w_songrating)
-            # #
-            w_rank = datatext(480 + bg_x, bg_y, 45, f'#{num + 1}', Exo_Regular, anchor='lm')
-            im = draw_text(im, w_rank)
+            if data.song_rating < 10:
+                sr = f'{data.song_rating:.1f}'
+                im = DrawText(im, bg_x + 55, bg_y + 110, 20, sr[0], data.Exo_Regular, anchor='mm').draw_text()
+                im = DrawText(im, bg_x + 55, bg_y + 120, 20, sr[1], data.Exo_Regular, anchor='mm').draw_text()
+                im = DrawText(im, bg_x + 55, bg_y + 140, 20, sr[2], data.Exo_Regular, anchor='mm').draw_text()
+            else:
+                sr = f'{data.song_rating:.1f}'
+                im = DrawText(im, bg_x + 55, bg_y + 100, 20, sr[0], data.Exo_Regular, anchor='mm').draw_text()
+                im = DrawText(im, bg_x + 55, bg_y + 120, 20, sr[1], data.Exo_Regular, anchor='mm').draw_text()
+                im = DrawText(im, bg_x + 55, bg_y + 130, 20, sr[2], data.Exo_Regular, anchor='mm').draw_text()
+                im = DrawText(im, bg_x + 55, bg_y + 150, 20, sr[3], data.Exo_Regular, anchor='mm').draw_text()
+            # 名次
+            im = DrawText(im, bg_x + 530, bg_y + 35, 45, num + 1, data.Exo_Regular, (0, 0, 0, 255), anchor='mm').draw_text()
             # 分数
-            w_score = datatext(235 + bg_x, 15 + bg_y, 55, f'{score:,}', GeosansLight)
-            im = draw_text(im, w_score)
+            im = DrawText(im, bg_x + 260, bg_y + 75, 50, f'{data.score:,}', data.Exo_Regular, (0, 0, 0, 255), anchor='lm').draw_text()
             # PURE 
-            w_PURE = datatext(235 + bg_x, 75 + bg_y, 30, 'PURE', GeosansLight)
-            im = draw_text(im, w_PURE)
-            w_p_count = datatext(335 + bg_x, 75 + bg_y, 30, p_count, GeosansLight)
-            im = draw_text(im, w_p_count)
-            w_sp_count = datatext(400 + bg_x, 75 + bg_y, 20, f'+{sp_count}', GeosansLight)
-            im = draw_text(im, w_sp_count)
+            im = DrawText(im, bg_x + 260, bg_y + 130, 30, 'P', data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
+            im = DrawText(im, bg_x + 290, bg_y + 130, 25, data.p_count, data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
+            im = DrawText(im, bg_x + 355, bg_y + 130, 20, f'| +{data.sp_count}', data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
             # FAR
-            w_FAR = datatext(235 + bg_x, 105 + bg_y, 30, 'FAR', GeosansLight)
-            im = draw_text(im, w_FAR)
-            w_far_count = datatext(335 + bg_x, 105 + bg_y, 30, far_count, GeosansLight)
-            im = draw_text(im, w_far_count)
+            im = DrawText(im, bg_x + 260, bg_y + 162, 30, 'F', data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
+            im = DrawText(im, bg_x + 290, bg_y + 162, 25, data.far_count, data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
             # LOST
-            w_LOST = datatext(235 + bg_x, 135 + bg_y, 30, 'LOST', GeosansLight)
-            im = draw_text(im, w_LOST)
-            w_lost_count = datatext(335 + bg_x, 135 + bg_y, 30, lost_count, GeosansLight)
-            im = draw_text(im, w_lost_count)
+            im = DrawText(im, bg_x + 260, bg_y + 194, 30, 'L', data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
+            im = DrawText(im, bg_x + 290, bg_y + 194, 25, data.miss_count, data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
             # Rating
-            w_Rating = datatext(235 + bg_x, 170 + bg_y, 30, 'Rating:', GeosansLight)
-            im = draw_text(im, w_Rating)
-            w_u_rating = datatext(335 + bg_x, 170 + bg_y, 30, f'{rating:.3f}', GeosansLight)
-            im = draw_text(im, w_u_rating)
+            im = DrawText(im, bg_x + 360, bg_y + 194, 25, f'Rating | {data.rating:.2f}', data.Exo_Regular, (0, 0, 0, 255), anchor='ls').draw_text()
             # time
-            game_time = playtime(play_time)
-            w_time = datatext(280 + bg_x, 210 + bg_y, 30, game_time, Exo_Regular, anchor='mm')
-            im = draw_text(im, w_time)
-            # new
-            if timediff(play_time) <= 7:
-                new_bg = open_img(newbg)
-                im.alpha_composite(new_bg, (bg_x - 23, bg_y))
+            im = DrawText(im, bg_x + 395, bg_y + 215, 20, data.playtime(data.play_time), data.Exo_Regular, anchor='mm').draw_text()
+            # # new
+            if timediff(data.play_time) <= 7:
+                im.alpha_composite(data.new_img, (bg_x + 32, bg_y - 8))
         # save
         base64str = img2b64(im)
         msg = MessageSegment.image(base64str)
@@ -264,7 +429,7 @@ async def draw_info(arcid: int) -> str:
         msg = f'Error {type(e)}'
     return msg
 
-async def draw_score(user_id, est: bool = False) -> str:
+async def draw_score(user_id: int, est: bool = False) -> Union[MessageSegment, str]:
     try:
         # 获取用户名
         if est:
@@ -283,49 +448,73 @@ async def draw_score(user_id, est: bool = False) -> str:
                 if user_id == i['user_id']:
                     userinfo = friends[n]
                     break
-
-        arcname = userinfo['name']
-        userrating = userinfo['rating'] / 100 if userinfo['rating'] != -1 else '--'
-        recentscore = userinfo['recent_score'][0]
-        songid = recentscore['song_id']
-        difficulty = recentscore['difficulty']
-
+                
+        data = Data('recent', userinfo)
+        ptt = data.ptt / 100 if data.ptt != -1 else '--'
         # 歌曲信息
-        songinfo = asql.song_info(songid, sql_diff(difficulty))
+        songinfo = asql.song_info(data.songid, data.diff(data.difficulty))
         title = songinfo[1] if songinfo[1] else songinfo[0]
-        artist = songinfo[2]
         songrating = songinfo[3] / 10
-        # 整理赋值
-        songbg = os.path.join(songdir, songid, 'base.jpg' if difficulty != 3 else '3.jpg')
-        score = recentscore['score']
-        sp_count = recentscore['shiny_perfect_count']
-        p_count = recentscore['perfect_count']
-        far_count = recentscore['near_count']
-        miss_count = recentscore['miss_count']
-        health = recentscore['health']
-        play_time = recentscore['time_played']
-        rating = recentscore['rating']
 
-        msg = f'''
-[CQ:image,file=file:///{songbg}]
-Player: {arcname}
-Rating: {userrating}
-Code: {arcid}
-PlayTime: {playtime(play_time)}
----------------------------------
-Song: {title}
-Artist: {artist}
-Difficulty: {diffdict[str(difficulty)][0].upper()} | SongRating: {songrating}
----------------------------------
-Score: {score:,}
-Rank: {'F' if health == -1 else isrank(score)} | Rating: {rating:.2f}
-Pure: {p_count} (+{sp_count})
-Far: {far_count}
-Lost: {miss_count}'''
-        return msg
+        diffi = data.diff(data.difficulty)
+        im = Image.new('RGBA', (1200, 900))
+        # 底图
+        im.alpha_composite(data.song_bg_img)
+        # 白线
+        im.alpha_composite(data.white_line, (140, 132))
+        # 搭档
+        im.alpha_composite(data.character_img, (500, 35))
+        # ptt背景
+        im.alpha_composite(data.ptt_img, (585, 140))
+        # 成绩背景
+        im.alpha_composite(data.bg_img, (50, 268))
+        # 黑线
+        im.alpha_composite(data.black_line, (50, 333))
+        # 曲绘
+        song_img_fillet = data.draw_fillet(data.song_img, 25, 'ld')
+        im.alpha_composite(song_img_fillet, (50, 338))
+        # 难度
+        im.alpha_composite(data.diff_img, (50, 800))
+        # 时间
+        im.alpha_composite(data.time_img, (562, 800))
+        # 评价
+        im.alpha_composite(data.rank_img, (900, 630))
+        # 昵称
+        im = DrawText(im, 290, 100, 50, data.arcname, data.Exo_Regular, anchor='mm').draw_text()
+        # 好友码
+        im = DrawText(im, 290, 170, 40, arcid, data.Exo_Regular, anchor='mm').draw_text()
+        # ptt
+        im = DrawText(im, 644, 197, 40, ptt, data.Exo_Regular, stroke_width=1, stroke_fill=(0, 0, 0, 255), anchor='mm').draw_text()
+        # rating
+        im = DrawText(im, 750, 135, 60, f'Rating: {data.rating:.2f}', data.Exo_Regular, anchor='lm').draw_text()
+        # 曲名
+        im = DrawText(im, 600, 300, 45, title, data.Kazesawa_Regular, color=(0, 0, 0, 255), anchor='mm').draw_text()
+        # 分数
+        im = DrawText(im, 600, 410, 100, f'{data.score:,}', data.Exo_Regular, color=(0, 0, 0, 255), anchor='lm').draw_text()
+        # Pure
+        im = DrawText(im, 600, 550, 55, 'Pure', data.Exo_Regular, color=(0, 0, 0, 255), anchor='ls').draw_text()
+        # Player Pure
+        im = DrawText(im, 800, 550, 55, f'{data.p_count} (+{data.sp_count})', data.Exo_Regular, color=(0, 0, 0, 255), anchor='ls').draw_text()
+        # Far
+        im = DrawText(im, 600, 635, 55, 'Far', data.Exo_Regular, color=(0, 0, 0, 255), anchor='ls').draw_text()
+        # Player Far
+        im = DrawText(im, 800, 635, 55, data.far_count, data.Exo_Regular, color=(0, 0, 0, 255), anchor='ls').draw_text()
+        # Lost
+        im = DrawText(im, 600, 720, 55, 'Lost', data.Exo_Regular, color=(0, 0, 0, 255), anchor='ls').draw_text()
+        # Player Lost
+        im = DrawText(im, 800, 720, 55, data.miss_count, data.Exo_Regular, color=(0, 0, 0, 255), anchor='ls').draw_text()
+        # Difficulty
+        im = DrawText(im, 306, 825, 40, f'{diffi.upper()} | {songrating}', data.Exo_Regular, anchor='mm').draw_text()
+        # Time
+        im = DrawText(im, 858, 825, 40, data.playtime(data.play_time), data.Exo_Regular, anchor='mm').draw_text()
+
+        base64str = img2b64(im)
+        msg = MessageSegment.image(base64str)
+        
     except Exception as e:
         log.error(traceback.print_exc())
-        return f'Error {type(e)}'
+        msg = f'Error {type(e)}'
+    return msg
 
 def random_music(rating: int, plus: bool, diff: int) -> str:
 
@@ -352,9 +541,14 @@ def random_music(rating: int, plus: bool, diff: int) -> str:
     songrating = [str(i / 10) for n, i in enumerate(songinfo) if n >= 4 and i != -1]
     diffc = [diffdict[str(_)][0].upper() for _ in range(len(songrating))]
 
-    songbg = os.path.join(songdir, songinfo[0], 'base.jpg' if difficulty != 3 else '3.jpg')
+    songs = {
+        'song_id': songinfo[0],
+        'difficulty': difficulty
+    }
 
-    msg = f'''[CQ:image,file=file:///{songbg}]
+    data = Data('random', songs)
+
+    msg = f'''[CQ:image,file=file:///{data.songbg}]
 Song: {songinfo[2] if songinfo[2] else songinfo[1]}
 Artist: {songinfo[3]}
 Difficulty: {' | '.join(diffc)}
@@ -362,11 +556,11 @@ Rating: {' | '.join(songrating)}'''
 
     return msg
 
-async def bindinfo(qqid, arcid, arcname) -> str:
-    asql.insert_temp_user(qqid, arcid, arcname.lower())
-    return f'用户 {arcid} 已成功绑定QQ {qqid}，现可使用 <arcinfo> 指令查询B30成绩和 <arcre:> 指令使用 est 查分器查询最近，<arcre> 指令需等待管理员确认是否为好友才能使用'
+def bindinfo(qqid: int, arcid: int, arcname: str, gid: int) -> str:
+    asql.insert_temp_user(qqid, arcid, arcname.lower(), gid)
+    return f'用户 {arcid} 已成功绑定QQ {qqid}，现可使用 <arcinfo> 指令查询B30成绩和 <arcre:> 指令使用 est 查分器查询最近，<arcre> 指令需等待管理员确认是否为好友才能使用，确认添加为好友后BOT将会在绑定的群@您提醒账号已绑定'
 
-async def newbind() -> str:
+async def newbind(bot: NoneBot) -> None:
     try:
         bind_id, email, password = asql.get_not_full_email()
         info = await get_web_api(email, password)
@@ -377,8 +571,10 @@ async def newbind() -> str:
             name = asql.get_user_name(user_id)
             if name: continue
             asql.insert_user(arcname.lower(), user_id, bind_id)
-        log.info('添加成功')
-        return '添加成功'
+            user = asql.get_gid(user_id)
+            await bot.send_group_msg(group_id=user[1], message=f'{MessageSegment.at(user[0])} 您的arc账号已绑定成功，现可用所有arc指令')
+            asql.delete_temp_user(user[0])
+            log.info(f'玩家：<{arcname}> 添加成功')
     except Exception as e:
-        log.error(f'Error {e}')
-        return '添加失败'
+        log.error(f'Error：{traceback.print_exc()}')
+        await bot.send_private_msg(user_id=SUPERUSERS[0], message=f'添加失败：{e}')

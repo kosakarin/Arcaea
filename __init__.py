@@ -1,7 +1,6 @@
 from hoshino.config import SUPERUSERS
 from hoshino import Service, priv
 from hoshino.typing import CQEvent
-from nonebot import get_bot
 import re
 
 from .sql import *
@@ -16,9 +15,7 @@ arcre: arcid  使用好友码查询TA人
 arcre: @  使用@ 查询好友
 arcup   查询用账号添加完好友，使用该指令绑定查询账号，添加成功即可使用arcre指令
 arcbind [arcid] [arcname]   绑定用户
-arcrd [定数] [难度] 随机一首指定定数的曲目，例如：arcrd 10.8 | arcrd 10+ | arcrd 9+ byd
-arcun   解除绑定
-'''
+arcun   解除绑定'''
 
 diffdict = {
     '0' : ['pst', 'past'],
@@ -158,12 +155,12 @@ async def arcrd(bot, ev:CQEvent):
 async def arcup(bot, ev:CQEvent):
     if not priv.check_priv(ev, priv.SUPERUSER):
         await bot.finish(ev, '请联系BOT管理员更新')
-    msg = await newbind()
-    await bot.send(ev, msg)
+    await newbind(bot)
 
 @sv.on_prefix(['arcbind', 'ARCBIND', 'Arcbind'])
 async def bind(bot, ev:CQEvent):
     qqid = ev.user_id
+    gid = ev.group_id
     arcid = ev.message.extract_plain_text().strip().split()
     try:
         if not arcid[0].isdigit() and len(arcid[0]) != 9:
@@ -175,10 +172,9 @@ async def bind(bot, ev:CQEvent):
     result = asql.get_user(qqid)
     if result:
         await bot.finish(ev, '您已绑定，如需要解绑请输入arcun', at_sender=True)
-    msg = await bindinfo(qqid, arcid[0], arcid[1])
+    msg = bindinfo(qqid, arcid[0], arcid[1], gid)
     await bot.send(ev, msg, at_sender=True)
-    for user_id in SUPERUSERS:
-        await get_bot().send_msg(user_id=user_id, message=f'Code:{arcid[0]}\nName:{arcid[1]}\n申请加为好友')
+    await bot.send_private_msg(user_id=SUPERUSERS[0], message=f'Code:{arcid[0]}\nName:{arcid[1]}\n申请加为好友')
 
 @sv.on_fullmatch(['arcun', 'Arcun', 'ARCUN'])
 async def unbind(bot, ev:CQEvent):
