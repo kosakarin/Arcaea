@@ -41,7 +41,7 @@ class Data:
     Kazesawa_Regular = os.path.join(_font_dir, 'Kazesawa-Regular.ttf')
 
     def __init__(self, project: str, info: dict) -> None:
-
+        self.isimg = True
         if project == 'recent':
             _playinfo = info['recent_score'][0]
             self.arcname: str = info['name']
@@ -79,7 +79,7 @@ class Data:
         
     def __recent__(self) -> None:
 
-        self._song_img = os.path.join(self._song_dir, self.songid, 'base.jpg' if self.difficulty != 3 else '3.jpg')
+        _song_img = os.path.join(self._song_dir, self.songid, 'base.jpg' if self.difficulty != 3 else '3.jpg')
         _rank_img = os.path.join(self._rank_dir, f'grade_{self.isrank(self.score) if self.health != -1 else "F"}.png')
         _ptt_img = os.path.join(self._ptt_dir, self.pttbg(self.ptt))
         _bg_img = os.path.join(self._recent_dir, 'bg.png')
@@ -91,7 +91,15 @@ class Data:
         character_name = f'{self.character}u_icon.png' if self.is_char_uncapped ^ self.is_char_uncapped_override else f'{self.character}_icon.png'
         _character_img = os.path.join(self._char_dir, character_name)
 
-        self.song_img = self.open_img(self._song_img)
+        if os.path.isdir(os.path.join(self._song_dir, self.songid)):
+            if os.path.isfile(_song_img):
+                self.song_img = self.open_img(_song_img)
+            else:
+                log.error(f'缺失曲目ID：{self._song_img}')
+                self.isimg = False
+        else:
+            log.error(f'缺失曲目文件夹：{self.songid}')
+            self.isimg = False
         self.rank_img = self.open_img(_rank_img)
         self.ptt_img = self.open_img(_ptt_img)
         self.bg_img = self.open_img(_bg_img)
@@ -99,7 +107,11 @@ class Data:
         self.black_line = self.open_img(_black_line)
         self.white_line = self.open_img(_white_line)
         self.time_img = self.open_img(_time_img)
-        self.character_img = self.open_img(_character_img).resize((200, 200))
+        if os.path.isfile(_character_img):
+            self.character_img = self.open_img(_character_img).resize((200, 200))
+        else:
+            log.error(f'缺失搭档图片：{self.character_img}')
+            self.isimg = False
 
     def __best30__(self) -> None:
 
@@ -114,7 +126,11 @@ class Data:
         self.ptt_img = self.open_img(_ptt_img).resize((150, 150))
         self.black_line = self.open_img(_black_line)
         self.time_img = self.open_img(_time_img)
-        self.character_img = self.open_img(_character_img).resize((250, 250))
+        if os.path.isfile(_character_img):
+            self.character_img = self.open_img(_character_img).resize((250, 250))
+        else:
+            log.error(f'缺失搭档图片：{self.character_img}')
+            self.isimg = False
 
     def songdata(self, info: dict) -> None:
 
@@ -140,9 +156,17 @@ class Data:
         _diff_img = os.path.join(self._diff_dir, f'{self.diff(self.difficulty).upper()}.png')
         _new_img = os.path.join(self._img, 'new.png')
 
+        if os.path.isdir(os.path.join(self._song_dir, self.songid)):
+            if os.path.isfile(_song_img):
+                self.song_img = self.open_img(_song_img).resize((175, 175))
+            else:
+                log.error(f'缺失曲绘：{self._song_img}')
+                self.isimg = False
+        else:
+            log.error(f'缺失曲目文件夹及文件：{self.songid}')
+            self.isimg = False
         self.b30_img = self.open_img(_b30_img)
         self.rank_img = self.open_img(_rank_img).resize((70, 40))
-        self.song_img = self.open_img(_song_img).resize((175, 175))
         self.diff_img = self.open_img(_diff_img)
         self.new_img = self.open_img(_new_img)
 
@@ -371,7 +395,8 @@ async def draw_info(arcid: int) -> str:
                 bg_x += 590
 
             data.songdata(i['data'][0])
-
+            if not data.isimg:
+                return '图片缺失，可能未更新搭档或曲绘，请联系BOT管理员'
             # 背景
             im.alpha_composite(data.b30_img, (bg_x + 40, bg_y))
             # 难度
@@ -450,6 +475,8 @@ async def draw_score(user_id: int, est: bool = False) -> Union[MessageSegment, s
                     break
                 
         data = Data('recent', userinfo)
+        if not data.isimg:
+            return '图片缺失，可能未更新搭档或曲绘，请联系BOT管理员'
         ptt = data.ptt / 100 if data.ptt != -1 else '--'
         # 歌曲信息
         songinfo = asql.song_info(data.songid, data.diff(data.difficulty))
